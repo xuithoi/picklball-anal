@@ -75,3 +75,53 @@ actual video inference, Unicode names, ball observations, heatmap, six exports a
 confirmed deletion. A completed job and its files survived a container restart on
 the mounted volume. The backend suite passed 34 tests. This is a short-clip smoke
 test, not a capacity guarantee for long 1080p videos or a live hosting deployment.
+
+## Cloudflare frontend with a Docker backend
+
+A static frontend deployment alone cannot execute the Python/PyTorch/FFmpeg video
+pipeline. The repository's `wrangler.jsonc` deploys frontend assets and a Worker
+that streams `/api/*` requests to a separately running Docker backend. Vite's
+proxy is only for local development. A Worker alone does not provision that backend.
+
+Cloudflare build settings (repository root `/`):
+
+- Build command: leave empty; Wrangler runs the checked-in `build.command`.
+- Deploy command: `npx wrangler@4.158.0 deploy`
+
+For branch builds, use `npx wrangler@4.158.0 preview` as the non-production
+deploy command. The explicit `previews` configuration supplies Preview variables;
+Preview secrets and Access protection must be configured separately (see the
+[AWS guide](deploy/aws/README.md#4-configure-and-deploy-the-cloudflare-worker)).
+
+The checked-in Wrangler configuration supplies the Worker entrypoint, assets and
+compatibility date. In the Worker's **Settings → Variables and Secrets**, add:
+
+- `BACKEND_ORIGIN`: the actual HTTPS backend origin, e.g. `https://your-service.example.com`.
+  Supply only the origin, without `/api`, query strings or credentials. The
+  checked-in default is `https://pickleballmvp.run.place`; verify its HTTPS health
+  before deploying the Worker.
+- If the backend uses its existing Basic authentication, `BACKEND_USERNAME`
+  (default `kun`) and **secret** `BACKEND_PASSWORD` matching the backend's
+  `APP_PASSWORD`. Enter the password securely in Cloudflare, never in Git or chat.
+
+Keep the Worker's existing Cloudflare Access protection enabled when using a
+shared backend password: the Worker uses that credential on behalf of its allowed
+users. Cloudflare Access cookies and identity tokens are not forwarded upstream.
+The backend should remain protected by its own authentication.
+
+Redeploy after saving the settings. `/api/health` must return `{"ok":true}`;
+then validate an upload, job polling, downloads and deletion through the Worker.
+If no backend is configured, the Worker returns a JSON 503 with setup instructions
+rather than serving the frontend HTML for API calls. Upload size is also limited
+by the Cloudflare plan and backend settings; a 600 MB client ceiling does not
+raise either limit. Services handling model inference must use one Uvicorn worker.
+
+Run proxy regression checks with `node --test worker/*.test.mjs`.
+No cloud backend is created or paid plan activated by adding this configuration.
+
+## AWS EC2
+
+For the existing Docker backend on AWS EC2 with HTTPS and Cloudflare API routing,
+see [deploy/aws/README.md](deploy/aws/README.md). The EC2 recipe includes a single
+backend worker, persistent Docker volumes, generated private authentication settings
+and Caddy HTTPS. It does not create AWS resources or guarantee free hosting.

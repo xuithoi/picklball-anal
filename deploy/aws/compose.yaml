@@ -1,0 +1,46 @@
+services:
+  backend:
+    image: pickleball-ai:latest
+    restart: unless-stopped
+    environment:
+      REQUIRE_AUTH: "1"
+      APP_USERNAME: "${APP_USERNAME:-kun}"
+      APP_PASSWORD: "${APP_PASSWORD:?Set APP_PASSWORD in the private .env file}"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-100}"
+      RESULT_TTL_SECONDS: "1800"
+      CLEANUP_INTERVAL_SECONDS: "30"
+    volumes:
+      - jobs:/var/data
+    mem_limit: 1600m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  https:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      BACKEND_DOMAIN: "${BACKEND_DOMAIN:?Set a real backend domain in .env}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  jobs:
+    name: "${DATA_VOLUME:-pickleball_data}"
+    external: true
+  caddy_data:
+  caddy_config:

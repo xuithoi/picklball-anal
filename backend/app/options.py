@@ -9,6 +9,7 @@ class AnalysisOptions(BaseModel):
 
     player_count: Literal[2, 4] = 4
     player_names: list[str] | None = None
+    player_seeds: list[tuple[float, float]] | None = None
     confidence: float = Field(default=0.3, ge=0.1, le=0.9)
     inference_stride: int = Field(default=2, ge=1, le=4)
     player_trails: bool = True
@@ -31,6 +32,16 @@ class AnalysisOptions(BaseModel):
             cleaned.append(name)
         return cleaned
 
+    @field_validator('player_seeds')
+    @classmethod
+    def normalized_players(cls, points):
+        if points is not None:
+            if any(v < 0 or v > 1 for point in points for v in point):
+                raise ValueError('Vị trí người chơi phải nằm trong khung hình.')
+            if len(set(points)) != len(points):
+                raise ValueError('Hãy chọn vị trí riêng cho từng người chơi.')
+        return points
+
     @field_validator('ball_seed')
     @classmethod
     def normalized_seed(cls, value):
@@ -40,6 +51,8 @@ class AnalysisOptions(BaseModel):
 
     @model_validator(mode='after')
     def require_ball_seed(self):
+        if self.player_seeds is not None and len(self.player_seeds) != self.player_count:
+            raise ValueError('Chọn đủ vị trí cho từng người chơi (2 hoặc 4).')
         if self.player_names is not None and len(self.player_names) != self.player_count:
             raise ValueError('Số tên phải khớp số người chơi (2 hoặc 4).')
         self.player_names = [name or f'P{i+1}' for i, name in enumerate(self.player_names or [''] * self.player_count)]
