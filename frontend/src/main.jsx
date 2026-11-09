@@ -23,6 +23,7 @@ import {
 import "./style.css";
 import { requestJson } from "./api.js";
 import VideoFramePicker, { frameTime } from "./VideoFramePicker.jsx";
+import BallSeedEditor from "./BallSeedEditor.jsx";
 
 const API = "/api";
 const fileUrl = (id, name) => `${API}/jobs/${id}/files/${name}`;
@@ -1141,8 +1142,8 @@ function App() {
                   </p>
                 )}
               </fieldset>
-              {file && !job && (
-                <div className="calibration">
+              {file && (
+                <div className="calibration" style={{ display: job ? "none" : undefined }}>
                   <div className="calibration-heading">
                     <div>
                       <h3>
@@ -1270,6 +1271,11 @@ function App() {
                       </span>
                     ))}
                   </div>
+                  {options.ball_tracking && frameReady && (
+                    <BallSeedEditor image={canvas.current} seed={ballSeed} radius={options.ball_radius}
+                      frameKey={startTime} onChange={setBallSeed}
+                      onRadiusChange={(value) => setOption("ball_radius", value)} />
+                  )}
                   <div className="calibration-count">
                     <span className={corners.length === 4 ? "lime" : ""}>
                       {corners.length === 4 ? (
@@ -1320,6 +1326,11 @@ function App() {
                       {job.message ||
                         "Video đang chờ xử lý. Bạn có thể giữ trang này mở để xem kết quả."}
                     </p>
+                    {job.state === "failed" && (
+                      <button type="button" className="secondary" onClick={() => {
+                        setJob(null); setSummary(null); setError("");
+                      }}>Chỉnh lại đầu vào</button>
+                    )}
                   </div>
                   <div className="progress-area">
                     <strong>

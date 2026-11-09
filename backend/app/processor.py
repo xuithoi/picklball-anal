@@ -223,7 +223,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
-        'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None},
+        'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None},
         'warnings': warnings,
         'note': 'Heatmap counts accumulated player detections, not ball movement. Court coordinates assume a planar court. Player IDs may switch on occlusion.',
     }))
