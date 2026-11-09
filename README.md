@@ -122,7 +122,10 @@ selection is always frame zero, independent of the original-video playback posit
   "player_count": 4,
   "confidence": 0.3,
   "inference_stride": 2,
+  "player_marker": "ellipse",
   "player_trails": true,
+  "minimap_overlay": false,
+  "court_lines": false,
   "heatmap_overlay": false,
   "ball_tracking": false,
   "ball_seed": null,
@@ -137,7 +140,8 @@ Ball tracking requires a seed; the heatmap video inset requires four valid court
 corners. Invalid settings are rejected before a job is queued. Settings are recorded
 in job status and `summary.json`.
 
-The exported video includes player boxes and, when selected, player movement trails,
+The exported video includes colored foot rings (or optional bounding boxes), athlete
+names, and, when selected, player movement trails,
 a cumulative **player** heatmap inset, and an experimental yellow ball path. Ball
 observations are made on every frame, independently of the person inference stride.
 No ball position is interpolated through a missing detection. `ball.json` exports
@@ -188,3 +192,35 @@ Frontend API response regression checks: `cd frontend && node --test src/api.tes
 Unicode overlays use DejaVu Sans (`fonts-dejavu-core` in the Docker image). Native
 installs require `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`, or set `LABEL_FONT`
 to an existing Unicode TrueType font path.
+
+
+## Video court graphics
+
+The default player marker is a double ellipse at the detected foot position.
+Uncheck **Vòng màu dưới chân** to use bounding boxes instead. Marker colors match
+the P1–P4 name/position selectors. Names still come from user input and first-frame
+manual assignments; the renderer does not recognize athlete identity.
+
+Enable **Minimap trong video** for a frame-updated player map at the bottom left,
+and **Vạch sân trên video** for projected boundaries, kitchen lines, center service
+lines and net reference. Both require four selected court corners, in the existing
+TL/TR/BR/BL order. The minimap and optional density heatmap occupy opposite corners.
+The minimap represents player ground positions; airborne ball positions are not
+projected onto the court. Very small videos skip an inset that would not fit.
+
+API options: `player_marker` is `ellipse` (default) or `box`; `minimap_overlay` and
+`court_lines` default to false. These options are saved in job status and summary.
+A manually assigned athlete remains labeled outside the court boundary. Exported
+`court_xy` values are in the 400×880 court coordinate system and may fall outside
+that rectangle; they are not clamped to the baseline. The minimap includes a small
+surrounding margin. Only on-court observations contribute to the heatmap.
+
+Player and ball trails fade toward older observations. Ball trails are magenta,
+retain explicit gaps for missing detections and are limited to approximately
+0.7 seconds (4–90 frames). They do not add synthetic observations or change the
+exported ball positions. The existing seeded color tracker is still experimental;
+this change does not add a trained ball detector, hit/bounce detection or 3D tracking.
+
+Deployment order: update/rebuild the EC2 backend from this feature branch before
+rolling out the frontend. An older backend rejects the new option names. Merging
+or deploying Cloudflare alone does not update the Python container on EC2.

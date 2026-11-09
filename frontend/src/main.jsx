@@ -423,7 +423,10 @@ function App() {
     player_count: 4,
     confidence: 0.3,
     inference_stride: 2,
+    player_marker: "ellipse",
     player_trails: true,
+    minimap_overlay: false,
+    court_lines: false,
     heatmap_overlay: false,
     ball_tracking: false,
     ball_radius: 6,
@@ -441,6 +444,7 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const canvas = useRef(null);
+  const needsCourt = options.heatmap_overlay || options.minimap_overlay || options.court_lines;
   const busy =
     uploading ||
     (job && !["complete", "failed", "expired"].includes(job.state));
@@ -543,6 +547,8 @@ function App() {
     setFrameReady(false);
     setSummary(null);
     setOption("heatmap_overlay", false);
+    setOption("minimap_overlay", false);
+    setOption("court_lines", false);
     setFile(selected);
   }
   async function analyze() {
@@ -555,8 +561,8 @@ function App() {
       return setError(
         "Hãy chọn đủ 4 góc sân hoặc bấm Chọn lại để bỏ hiệu chỉnh.",
       );
-    if (options.heatmap_overlay && corners.length !== 4)
-      return setError("Chọn đủ 4 góc sân để chèn heatmap vào video.");
+    if (needsCourt && corners.length !== 4)
+      return setError("Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.");
     const named = playerNames.slice(0, options.player_count).some((name) => name.trim());
     const seeds = playerSeeds.slice(0, options.player_count);
     if ((named || seeds.some(Boolean)) && seeds.some((point) => !point))
@@ -1049,6 +1055,26 @@ function App() {
                 </div>
                 <div className="output-options">
                   <label>
+                    <input type="checkbox"
+                      checked={options.player_marker === "ellipse"}
+                      onChange={(e) => setOption("player_marker", e.target.checked ? "ellipse" : "box")}
+                    />
+                    <span>
+                      <strong>Vòng màu dưới chân</strong>
+                      <small>Giữ màu P1–P{options.player_count} và tên đã nhập. Bỏ chọn để dùng khung chữ nhật.</small>
+                    </span>
+                  </label>
+                  {[
+                    ["minimap_overlay", "Minimap trong video", "Cần 4 góc sân. Cập nhật vị trí chân người chơi ở góc trái video."],
+                    ["court_lines", "Vạch sân trên video", "Cần 4 góc sân. Vẽ đường biên, vạch bếp và đường giữa theo phối cảnh."],
+                  ].map(([key, title, hint]) => (
+                    <label key={key}>
+                      <input type="checkbox" checked={options[key]}
+                        onChange={(e) => setOption(key, e.target.checked)} />
+                      <span><strong>{title}</strong><small>{hint}</small></span>
+                    </label>
+                  ))}
+                  <label>
                     <input
                       type="checkbox"
                       checked={options.player_trails}
@@ -1152,15 +1178,15 @@ function App() {
                       <h3>
                         <Crosshair size={18} /> Chuẩn bị khung hình đầu{" "}
                         <span className="outline-tag">
-                          {options.ball_tracking || options.heatmap_overlay || playerNames.slice(0, options.player_count).some((name) => name.trim())
+                          {options.ball_tracking || needsCourt || playerNames.slice(0, options.player_count).some((name) => name.trim())
                             ? "CẦN CHỌN ĐẦU VÀO"
                             : "TÙY CHỌN"}
                         </span>
                       </h3>
                       <p>
                         Chọn 4 góc ngoài của sân theo thứ tự: trên trái → trên
-                        phải → dưới phải → dưới trái. Cần bước này để có bản đồ
-                        sân và heatmap.
+                        phải → dưới phải → dưới trái. Cần bước này để có minimap,
+                        vạch sân và heatmap.
                       </p>
                     </div>
                     <button
@@ -1283,7 +1309,7 @@ function App() {
                       )}{" "}
                       {corners.length}/4 góc đã chọn
                     </span>
-                    <span>Bỏ qua góc sân để xuất video không có heatmap.</span>
+                    <span>Minimap, vạch sân và heatmap cần đủ 4 góc sân.</span>
                   </div>
                 </div>
               )}
@@ -1409,6 +1435,12 @@ function App() {
                         <span>
                           <Check size={13} /> Vệt di chuyển
                         </span>
+                      )}
+                      {job.options?.minimap_overlay && (
+                        <span><Check size={13} /> Minimap trong video</span>
+                      )}
+                      {job.options?.court_lines && (
+                        <span><Check size={13} /> Vạch sân</span>
                       )}
                       {job.options?.heatmap_overlay && (
                         <span>

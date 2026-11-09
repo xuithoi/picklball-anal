@@ -12,7 +12,10 @@ class AnalysisOptions(BaseModel):
     player_seeds: list[tuple[float, float]] | None = None
     confidence: float = Field(default=0.3, ge=0.1, le=0.9)
     inference_stride: int = Field(default=2, ge=1, le=4)
+    player_marker: Literal['ellipse', 'box'] = 'ellipse'
     player_trails: bool = True
+    minimap_overlay: bool = False
+    court_lines: bool = False
     heatmap_overlay: bool = False
     ball_tracking: bool = False
     ball_seed: tuple[float, float] | None = None

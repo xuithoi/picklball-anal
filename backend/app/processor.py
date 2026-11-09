@@ -10,10 +10,7 @@ from ultralytics import YOLO
 from .ball import ColorBallTracker
 from .options import AnalysisOptions
 from .labels import draw_labels
-
-# Canonical pickleball court (20 ft wide x 44 ft long), oriented vertically.
-W, H = 400, 880
-COLORS = [(244, 78, 125), (245, 181, 46), (34, 195, 168), (141, 97, 245)]  # RGB
+from .overlays import W, H, COLORS, CourtOverlay, draw_player, draw_fading_trail
 
 
 def draw_court():
@@ -61,8 +58,8 @@ def bind_player_seeds(boxes, ids, seeds, width, height):
 
 def process_video(input_file: Path, out: Path, corners, progress, options=None):
     settings = AnalysisOptions.model_validate(options or {})
-    if settings.heatmap_overlay and not corners:
-        raise ValueError('Chọn đủ 4 góc sân để chèn heatmap vào video.')
+    if (settings.heatmap_overlay or settings.minimap_overlay or settings.court_lines) and not corners:
+        raise ValueError('Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.')
     cap = cv2.VideoCapture(str(input_file))
     writer = None
     try:
@@ -80,6 +77,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         if corners:
             source = np.float32([[x * width, y * height] for x, y in corners])
             transform = cv2.getPerspectiveTransform(source, np.float32([[0, 0], [W-1, 0], [W-1, H-1], [0, H-1]]))
+        overlay = CourtOverlay(width, height, corners)
         model = YOLO(os.getenv('YOLO_MODEL', 'yolo11n.pt'))
         tmp = out / 'raw_annotated.mp4'
         writer = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
@@ -101,7 +99,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             if not ok:
                 break
             if settings.ball_tracking and ball_tracker is None:
-                ball_tracker = ColorBallTracker(frame, settings.ball_seed, settings.ball_radius, settings.ball_tolerance)
+                ball_tracker = ColorBallTracker(frame, settings.ball_seed, settings.ball_radius, settings.ball_tolerance, trail_length=max(4, min(90, round(fps * .7))))
             ball_point = ball_tracker.update(frame) if ball_tracker else None
             if ball_tracker:
                 ball_detected += ball_point is not None
@@ -124,9 +122,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                         point = None
                         if transform is not None:
                             xp, yp = cv2.perspectiveTransform(np.float32([[foot_xy]]), transform)[0, 0]
-                            if not (-25 <= xp <= W+25 and -25 <= yp <= H+25):
+                            selected = settings.player_seeds is not None and track_id in id_to_slot
+                            if not selected and not (-25 <= xp <= W+25 and -25 <= yp <= H+25):
                                 continue
-                            point = [float(np.clip(xp, 0, W-1)), float(np.clip(yp, 0, H-1))]
+                            point = [float(xp), float(yp)]
                         if track_id not in id_to_slot:
                             if settings.player_seeds is not None:
                                 continue
@@ -141,26 +140,29 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                         history.append((frame_idx, tuple(map(int, foot_xy))))
                         if point is not None:
                             trails[slot].append(point)
-                            visit = np.zeros_like(heat)
-                            cv2.circle(visit, tuple(map(int, point)), 18, 1.0, -1)
-                            heat += visit
+                            if 0 <= point[0] < W and 0 <= point[1] < H:
+                                visit = np.zeros_like(heat)
+                                cv2.circle(visit, tuple(map(int, point)), 18, 1.0, -1)
+                                heat += visit
+                if settings.minimap_overlay:
+                    overlay.update(observations)
                 if settings.heatmap_overlay:
                     mini_heat = heatmap_image(heat, base_court)
-            # Preserve the last detections on skipped frames instead of flashing boxes.
+            # Skipped frames retain the latest observations; JSON records inferred=False.
+            if settings.court_lines:
+                overlay.draw_lines(frame)
             name_labels = []
             for obs in observations:
                 slot = int(obs['player'][1:])
-                color = COLORS[slot-1][::-1]
-                x1, y1, x2, y2 = map(int, obs['box'])
                 if settings.player_trails:
                     history = [point for _, point in image_trails[slot]]
-                    if len(history) >= 2:
-                        cv2.polylines(frame, [np.int32(history)], False, color, 2, cv2.LINE_AA)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                name_labels.append((x1, max(2, y1-28), f"{obs['player']} · {obs['name']}" if obs['name'] != obs['player'] else obs['player'], COLORS[slot-1]))
+                    draw_fading_trail(frame, history, COLORS[slot - 1][::-1])
+                name_labels.append(draw_player(frame, obs, settings.player_marker))
             frame = draw_labels(frame, name_labels)
             if ball_tracker:
                 ball_tracker.draw(frame, ball_point)
+            if settings.minimap_overlay:
+                overlay.draw_minimap(frame, settings.player_trails)
             if settings.heatmap_overlay:
                 inset_h = min(int(height * .36), 240)
                 inset_w = int(inset_h * W / H)
@@ -191,7 +193,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     court = base_court.copy()
     court_labels = []
     for slot, points in trails.items():
-        if points:
+        if points and 0 <= points[-1][0] < W and 0 <= points[-1][1] < H:
             point = tuple(map(int, points[-1]))
             cv2.circle(court, point, 11, COLORS[slot-1][::-1], -1)
             name = settings.player_names[slot-1]

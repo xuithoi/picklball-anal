@@ -4,9 +4,11 @@ from collections import deque
 import cv2
 import numpy as np
 
+from .overlays import draw_fading_trail
+
 
 class ColorBallTracker:
-    def __init__(self, first_frame, seed, radius=6, tolerance=15):
+    def __init__(self, first_frame, seed, radius=6, tolerance=15, trail_length=36):
         height, width = first_frame.shape[:2]
         self.radius = radius
         self.tolerance = tolerance
@@ -18,7 +20,7 @@ class ColorBallTracker:
             raise ValueError('Chọn lại tâm bóng màu vàng/xanh sáng ở khung hình đầu. Chế độ thử nghiệm chưa phù hợp bóng trắng hoặc bóng bị che khuất.')
         self.velocity = np.zeros(2)
         self.missing = 0
-        self.path = deque(maxlen=36)
+        self.path = deque(maxlen=trail_length)
 
     def update(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -58,11 +60,10 @@ class ColorBallTracker:
         return point
 
     def draw(self, frame, point):
-        previous = None
-        for current in self.path:
-            if previous is not None and current is not None:
-                cv2.line(frame, previous, current, (70, 245, 255), 2, cv2.LINE_AA)
-            previous = current
+        color = (235, 90, 235)
+        draw_fading_trail(frame, self.path, color, 2)
         if point is not None:
-            cv2.circle(frame, point, self.radius + 4, (70, 245, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, 'BALL / EXP', (point[0] + 10, max(16, point[1] - 10)), cv2.FONT_HERSHEY_SIMPLEX, .4, (70, 245, 255), 1, cv2.LINE_AA)
+            cv2.circle(frame, point, self.radius + 4, color, 2, cv2.LINE_AA)
+            cv2.circle(frame, point, 2, (240, 250, 250), -1, cv2.LINE_AA)
+            cv2.putText(frame, 'BALL / EXP', (point[0] + 10, max(16, point[1] - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, .4, color, 1, cv2.LINE_AA)
