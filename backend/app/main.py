@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import shutil
 import threading
@@ -12,6 +13,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from .processor import process_video
+from .options import AnalysisOptions
+from pydantic import ValidationError
 
 ROOT = Path(os.getenv('DATA_DIR', '/data'))
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -83,7 +86,7 @@ async def lifespan(app):
     thread.join(timeout=2)
 
 
-app = FastAPI(title='Pickleball AI MVP', lifespan=lifespan)
+app = FastAPI(title='Pickleball Kun AI', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:8080').split(','), allow_credentials=False, allow_methods=['GET', 'POST', 'DELETE'], allow_headers=['*'])
 locks = {}
 
@@ -107,12 +110,12 @@ def update_status(path, **kwargs):
         f.write_text(json.dumps(state))
 
 
-def worker(path, corners):
+def worker(path, corners, options=None):
     with registry_lock:
         running_jobs.add(str(path))
     try:
         update_status(path, state='processing', progress=0, message='Loading AI model')
-        process_video(path / 'input.mp4', path, corners, lambda p, m: update_status(path, progress=p, message=m))
+        process_video(path / 'input.mp4', path, corners, lambda p, m: update_status(path, progress=p, message=m), options)
         update_status(path, state='complete', progress=100, message='Analysis ready', completed_at=time.time(), expires_at=time.time() + TTL_SECONDS)
     except Exception as exc:
         update_status(path, state='failed', message=str(exc)[:500], expires_at=time.time() + TTL_SECONDS)
@@ -127,17 +130,32 @@ def health():
 
 
 @app.post('/api/jobs', status_code=202)
-async def create_job(video: UploadFile = File(...), corners: str = Form('')):
+async def create_job(video: UploadFile = File(...), corners: str = Form(''), options: str = Form('{}')):
     if not (video.filename or '').lower().endswith('.mp4'):
         raise HTTPException(400, 'Upload an MP4 file')
     parsed = None
     if corners.strip():
         try:
             parsed = json.loads(corners)
-            if not isinstance(parsed, list) or len(parsed) != 4 or any(not isinstance(p, list) or len(p) != 2 or any(not isinstance(v, (int, float)) or v < 0 or v > 1 for v in p) for p in parsed):
+            if not isinstance(parsed, list) or len(parsed) != 4 or any(not isinstance(p, list) or len(p) != 2 or any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) or v < 0 or v > 1 for v in p) for p in parsed):
                 raise ValueError()
         except (ValueError, TypeError):
             raise HTTPException(400, 'corners must be four normalized [x,y] pairs: top-left, top-right, bottom-right, bottom-left')
+    try:
+        settings = AnalysisOptions.model_validate_json(options)
+    except ValidationError as exc:
+        await video.close()
+        raise HTTPException(422, '; '.join(error['msg'] for error in exc.errors()))
+    if settings.heatmap_overlay and parsed is None:
+        await video.close()
+        raise HTTPException(422, 'Chọn đủ 4 góc sân để chèn heatmap vào video.')
+    if parsed is not None:
+        import cv2
+        import numpy as np
+        polygon = np.array(parsed, dtype=np.float32)
+        if not cv2.isContourConvex(polygon) or cv2.contourArea(polygon) < 0.005:
+            await video.close()
+            raise HTTPException(422, 'Bốn góc sân phải tạo thành tứ giác lồi, theo thứ tự trên trái, trên phải, dưới phải, dưới trái.')
     job_id = str(uuid.uuid4())
     path = ROOT / job_id
     path.mkdir()
@@ -149,8 +167,8 @@ async def create_job(video: UploadFile = File(...), corners: str = Form('')):
                 if total > MAX_BYTES:
                     raise HTTPException(413, 'Video exceeds configured upload limit')
                 output.write(chunk)
-        update_status(path, id=job_id, state='queued', progress=0, message='Waiting to start', calibrated=parsed is not None, created_at=time.time())
-        threading.Thread(target=worker, args=(path, parsed), daemon=True).start()
+        update_status(path, id=job_id, state='queued', progress=0, message='Waiting to start', calibrated=parsed is not None, created_at=time.time(), options=settings.model_dump())
+        threading.Thread(target=worker, args=(path, parsed, settings.model_dump()), daemon=True).start()
         return {'id': job_id}
     except Exception:
         shutil.rmtree(path, ignore_errors=True)
@@ -171,7 +189,7 @@ def get_job(job_id: str):
 
 @app.get('/api/jobs/{job_id}/files/{filename}')
 def get_file(job_id: str, filename: str):
-    if filename not in {'annotated.mp4', 'heatmap.png', 'court.png', 'positions.json', 'summary.json'}:
+    if filename not in {'annotated.mp4', 'heatmap.png', 'court.png', 'positions.json', 'summary.json', 'ball.json'}:
         raise HTTPException(404, 'File not found')
     path = job_dir(job_id)
     with registry_lock:

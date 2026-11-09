@@ -1682,3 +1682,339 @@ input[type="range"] {
     transition: none !important;
   }
 }
+
+/* Functional analysis controls */
+.kun-brand {
+  gap: 7px;
+}
+.kun-brand > img {
+  width: 64px;
+  height: 57px;
+  object-fit: contain;
+  margin: -9px -4px -9px -9px;
+}
+.kun-brand .brand-ai {
+  font-size: 19px;
+  letter-spacing: 1.6px;
+}
+.analysis-options {
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 27px 36px;
+  margin: 0;
+  min-width: 0;
+}
+.analysis-options legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 23px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.option-fields {
+  clear: both;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 24px;
+}
+.option-fields > label,
+.ball-settings > label {
+  font-size: 11px;
+  color: #c5d0b9;
+  line-height: 1.8;
+  display: block;
+  min-width: 0;
+}
+.option-fields select {
+  display: block;
+  width: 100%;
+  margin-top: 9px;
+  padding: 12px 9px;
+  border: 1px solid #3c4c30;
+  border-radius: 4px;
+  background: #151e12;
+  color: #d7e4c7;
+  font-size: 11px;
+}
+.option-fields input[type="range"],
+.ball-settings input[type="range"] {
+  display: block;
+  margin: 19px 0 12px;
+  width: 100%;
+}
+.option-fields output,
+.ball-settings output {
+  float: right;
+  color: var(--lime);
+  font-family: monospace;
+}
+.option-fields small {
+  font-size: 9px;
+  color: #839374;
+  display: block;
+  line-height: 1.6;
+}
+.output-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 26px;
+}
+.output-options > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+.output-options input[type="checkbox"] {
+  accent-color: var(--lime);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+.output-options strong {
+  font-size: 11px;
+  color: #d4dfc8;
+  font-weight: 500;
+  line-height: 1.7;
+}
+.output-options .outline-tag {
+  font-size: 6px;
+  padding: 2px 4px;
+}
+.output-options small {
+  display: block;
+  color: #819173;
+  font-size: 9px;
+  line-height: 1.7;
+  margin-top: 6px;
+}
+.analysis-options:disabled {
+  opacity: 0.5;
+}
+.ball-settings {
+  padding: 19px;
+  background: #1e231208;
+  border: 1px solid #4a5030;
+  border-radius: 5px;
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px 28px;
+}
+.ball-settings > p {
+  grid-column: 1/-1;
+  font-size: 10px;
+  color: #a5aa87;
+  line-height: 1.8;
+}
+.input-reminder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  margin-top: 20px;
+}
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.selection-toolbar .secondary.active {
+  color: var(--lime);
+  border-color: #839d59;
+  background: #c7ff6209;
+}
+.selection-toolbar > span {
+  font-family: monospace;
+  font-size: 9px;
+  margin-left: auto;
+  color: #889978;
+}
+.selection-hint {
+  font-size: 10px !important;
+  color: #d8dc9d;
+  margin-top: 14px;
+}
+.ball-seed {
+  position: absolute;
+  aspect-ratio: 1;
+  border: 2px solid #fff04e;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px #141f06;
+}
+.ball-seed > span {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff04e;
+  font-size: 9px;
+  line-height: 1;
+  background: #10150bcc;
+  padding: 4px;
+  border-radius: 2px;
+}
+.output-manifest {
+  display: flex;
+  gap: 9px 17px;
+  flex-wrap: wrap;
+  margin-top: 13px;
+}
+.output-manifest > span {
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #b4cb93;
+}
+.analysis-report {
+  border: 1px solid #34462b;
+  background: #172011;
+  padding: 13px;
+  border-radius: 4px;
+  margin-top: 17px;
+}
+.analysis-report strong {
+  font-size: 10px;
+  color: #bcd7a3;
+  font-weight: 500;
+}
+.analysis-report p {
+  font-size: 10px;
+  margin-top: 7px;
+  line-height: 1.7;
+}
+.analysis-report .warning-text {
+  color: #cbbb81;
+}
+.export-actions {
+  gap: 8px;
+}
+.export-actions .secondary {
+  font-size: 9px;
+  padding: 10px;
+}
+@media (max-width: 850px) {
+  .option-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+  .option-fields > label:last-child {
+    grid-column: 1/-1;
+  }
+  .output-options {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+  .output-options small {
+    margin-top: 2px;
+  }
+  .selection-toolbar > span {
+    margin-left: 0;
+    width: 100%;
+    margin-top: 5px;
+  }
+  .analysis-options {
+    padding: 25px 28px;
+  }
+}
+@media (max-width: 600px) {
+  .kun-brand > img {
+    width: 48px;
+    height: 44px;
+  }
+  .kun-brand .brand-ai {
+    font-size: 16px;
+  }
+  .analysis-options {
+    padding: 22px 18px;
+  }
+  .analysis-options legend {
+    font-size: 12px;
+    gap: 8px;
+  }
+  .analysis-options legend .outline-tag {
+    font-size: 6px;
+  }
+  .option-fields {
+    grid-template-columns: 1fr;
+    gap: 19px;
+  }
+  .option-fields > label:last-child {
+    grid-column: auto;
+  }
+  .ball-settings {
+    grid-template-columns: 1fr;
+    padding: 13px;
+    gap: 12px;
+  }
+  .ball-settings > p {
+    grid-column: auto;
+  }
+  .selection-toolbar .secondary {
+    font-size: 9px;
+    padding: 9px;
+  }
+  .selection-toolbar > span {
+    font-size: 8px;
+  }
+  .calframe {
+    margin-top: 18px;
+  }
+  .input-reminder {
+    align-items: flex-start;
+    font-size: 9px;
+  }
+  .input-reminder svg {
+    margin-top: 3px;
+  }
+}
+.input-video {
+  border-top: 1px solid var(--line);
+  padding: 18px 36px;
+}
+.input-video summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  color: #c5d9ac;
+}
+.input-video summary > span {
+  margin-left: auto;
+  font-family: monospace;
+  font-size: 9px;
+  color: #80936e;
+}
+.input-video video {
+  display: block;
+  width: 100%;
+  max-height: 400px;
+  background: #080c07;
+  margin-top: 18px;
+  border-radius: 4px;
+}
+.input-video p {
+  font-size: 10px;
+  margin-top: 9px;
+}
+@media (max-width: 600px) {
+  .input-video {
+    padding: 18px;
+  }
+  .input-video summary {
+    font-size: 10px;
+  }
+  .input-video summary > span {
+    font-size: 8px;
+  }
+}

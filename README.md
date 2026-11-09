@@ -1,6 +1,6 @@
-# Pickleball AI MVP — React + FastAPI + YOLO11 + ByteTrack
+# Pickleball Kun AI — React + FastAPI + YOLO11 + ByteTrack
 
-A runnable proof-of-concept for **offline processing of uploaded MP4 video**. No live camera, speed measurement, ball tracking or automatic scoring.
+A runnable proof-of-concept for **offline processing of uploaded MP4 video**. Includes optional experimental ball color tracking initialized by selecting the ball on the first frame. No live camera, speed measurement or automatic scoring.
 
 ## Quick start (Docker recommended)
 
@@ -24,9 +24,9 @@ For deployment on a VPS, install Docker Compose, clone/unzip the repository, run
 ### API
 
 - `GET /api/health`
-- `POST /api/jobs`: multipart `video` MP4 and optional `corners` JSON (`[[x,y],...]`, normalized 0–1)
+- `POST /api/jobs`: multipart `video` MP4, optional `corners` JSON (`[[x,y],...]`, normalized 0–1, convex TL/TR/BR/BL), and optional `options` JSON (see below)
 - `GET /api/jobs/{id}`: status, progress, errors
-- `GET /api/jobs/{id}/files/{filename}`: `annotated.mp4`, `heatmap.png`, `court.png`, `positions.json`, `summary.json`
+- `GET /api/jobs/{id}/files/{filename}`: `annotated.mp4`, `heatmap.png`, `court.png`, `positions.json`, `summary.json`, `ball.json`
 
 ## Development without Docker
 
@@ -56,7 +56,7 @@ Then open http://localhost:5173.
 
 1. **MVP, not validated production AI**. Generic person detector may include bystanders, miss small people or switch identities. The current simple mapping assigns slots P1–P4 to the first four distinct tracker IDs and **does not recover from ID switches**. Use a fixed camera with all four players clearly visible and few bystanders.
 2. Court and heatmap require clicking **four court corners**. Without calibration the system produces only annotated video. Perspective transform assumes a planar court. The four corners must correspond to the outer court boundaries, consistently ordered; reversed corners will distort results.
-3. Heatmap counts detected player foot positions, not measured time in zones, and combines all four players. The court map displays the last detected positions. At `INFERENCE_STRIDE=2`, only every second frame is analyzed and intermediate frames are unannotated.
+3. Heatmap counts detected player foot positions, not measured time in zones, and combines all four players. The court map displays the last detected positions. At inference stride 2, only every second frame is analyzed by default; the last player boxes remain visible on intermediate frames. The per-job inference stride is selectable (1–4).
 4. On CPU, a 5-minute 1080p video may take substantially longer than 5 minutes. Start with 30–60 seconds for testing. Processing time depends on CPU/GPU and model.
 5. Uploaded video and results expire after 30 minutes or can be deleted explicitly (see retention details below). File size limit is 600 MB. There is no authentication, queue persistence, user isolation, upload quota, antivirus scanning, video transcoding validation, or concurrency limiting. Only use on trusted networks until these are added.
 6. Jobs use in-process background threads: restarting the backend interrupts them. Use Redis + RQ/Celery for a real deployment, along with database records, durable object storage, user auth, retention policy, signed downloads, file validation and resource limits.
@@ -99,6 +99,59 @@ python -m pytest tests -q
 ```
 
 Build the frontend with `cd frontend && npm ci && npm run build`.
-The retention tests cover expiration, manual deletion, active download protection,
-abandoned-job recovery, original upload protection and CORS deletion requests.
+The tests cover retention, request validation, option propagation, seeded ball tracking and loss/reacquisition, heatmap density, and video/JSON export (including NumPy detections).
 AI accuracy still needs evaluation on representative pickleball match footage.
+
+## Inputs and video overlays
+
+The UI provides an original-video player, a fixed first-frame canvas, court-corner
+selection, singles/doubles selection, person confidence, inference stride, and
+checkboxes for player trails, heatmap inset and experimental ball tracking.
+
+For the ball tracker, enable the option, choose **Chọn tâm bóng**, click the center
+of the yellow/green ball on the first frame, and adjust the radius in source-video
+pixels and hue tolerance. A bright saturated seed is required. The frame used for
+selection is always frame zero, independent of the original-video playback position.
+
+`options` is a multipart form field containing JSON. Defaults:
+
+```json
+{
+  "player_count": 4,
+  "confidence": 0.3,
+  "inference_stride": 2,
+  "player_trails": true,
+  "heatmap_overlay": false,
+  "ball_tracking": false,
+  "ball_seed": null,
+  "ball_radius": 6,
+  "ball_tolerance": 15
+}
+```
+
+`player_count` must be 2 or 4, confidence 0.1–0.9, stride 1–4, ball radius 2–30 px,
+and hue tolerance 5–40 OpenCV hue units. A ball seed is normalized `[x,y]` in `[0,1]`.
+Ball tracking requires a seed; the heatmap video inset requires four valid court
+corners. Invalid settings are rejected before a job is queued. Settings are recorded
+in job status and `summary.json`.
+
+The exported video includes player boxes and, when selected, player movement trails,
+a cumulative **player** heatmap inset, and an experimental yellow ball path. Ball
+observations are made on every frame, independently of the person inference stride.
+No ball position is interpolated through a missing detection. `ball.json` exports
+video-pixel coordinates and timestamps, using `null` for missing observations.
+`positions.json` includes every frame with an `inferred` flag; skipped frames retain
+the most recent player detections and do not represent fresh model inference.
+
+**Ball tracking is a seeded color/shape heuristic, not a trained pickleball model.**
+Similar colors, motion blur, fast movement, camera changes, white balls or occlusion
+can cause false or missing observations. The reported observed-frame coverage is
+not an accuracy score. Real-match accuracy has not been validated. A dedicated ball
+model and annotated pickleball footage are needed for reliable automatic detection.
+
+The PNG heatmap counts accumulated player observations (not ball landings or time
+spent in seconds). Repeated visits add density. Ball image coordinates are not
+projected onto the court because an airborne ball violates the planar assumption.
+
+Brand asset: `frontend/public/brand/kun-logo.png` (transparent PNG), used in the
+header, footer and favicon. The homepage demo is explicitly simulated data.

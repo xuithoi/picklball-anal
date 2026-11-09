@@ -5,7 +5,6 @@ services:
     environment:
       DATA_DIR: /data
       YOLO_MODEL: yolo11n.pt
-      INFERENCE_STRIDE: '2'
       MAX_UPLOAD_MB: '600'
       RESULT_TTL_SECONDS: '1800'
       CLEANUP_INTERVAL_SECONDS: '30'

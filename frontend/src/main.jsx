@@ -52,7 +52,9 @@ function CourtScene({ time = 24, layer = "tracking", compact = false }) {
       aria-label={
         layer === "heatmap"
           ? "Mô phỏng heatmap di chuyển trên sân pickleball"
-          : "Mô phỏng theo dõi bốn người chơi trên sân pickleball"
+          : layer === "ball"
+            ? "Mô phỏng đường bóng trên sân pickleball"
+            : "Mô phỏng theo dõi bốn người chơi trên sân pickleball"
       }
     >
       <defs>
@@ -245,6 +247,32 @@ function CourtScene({ time = 24, layer = "tracking", compact = false }) {
           </g>
         );
       })}
+      {layer === "ball" && (
+        <g>
+          <path
+            d="M 300 405 Q 390 160 520 190 T 590 340"
+            fill="none"
+            stroke="#fff04e"
+            strokeWidth="3"
+            strokeDasharray="6 4"
+          />
+          <circle
+            cx={440 + Math.sin(time / 5) * 100}
+            cy={230 + Math.cos(time / 5) * 70}
+            r="7"
+            fill="#e9ff66"
+          />
+          <text
+            x="280"
+            y="530"
+            fontFamily="monospace"
+            fontSize="11"
+            fill="#fff04e"
+          >
+            BALL TRAJECTORY / SIMULATED
+          </text>
+        </g>
+      )}
       <path
         d="M 170 298 L 712 298 L 712 281 L 170 281 Z"
         fill="#adbea2"
@@ -307,7 +335,9 @@ function DemoPanel({ hero = false }) {
             ? "PLAYER TRACKING"
             : layer === "heatmap"
               ? "MOVEMENT HEATMAP"
-              : "COURT POSITIONS"}
+              : layer === "ball"
+                ? "BALL TRAJECTORY / DEMO"
+                : "COURT POSITIONS"}
         </div>
         <div className="four-players">
           <strong>04</strong>
@@ -344,6 +374,7 @@ function DemoPanel({ hero = false }) {
           ["tracking", ScanLine, "Tracking"],
           ["heatmap", Layers, "Heatmap"],
           ["court", Crosshair, "Bản đồ sân"],
+          ["ball", ScanLine, "Đường bóng"],
         ].map(([id, Icon, label]) => (
           <button
             key={id}
@@ -360,12 +391,47 @@ function DemoPanel({ hero = false }) {
   );
 }
 
+function Brand() {
+  return (
+    <a
+      className="brand kun-brand"
+      href="#"
+      aria-label="Pickleball Kun AI — trang chủ"
+    >
+      <img src="/brand/kun-logo.png" alt="" />
+      <span>
+        PICKLEBALL
+        <span className="brand-ai">
+          KUN AI<span className="brand-period">.</span>
+        </span>
+      </span>
+    </a>
+  );
+}
+
 function App() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
   const [corners, setCorners] = useState([]);
+  const [selectionMode, setSelectionMode] = useState("court");
+  const [ballSeed, setBallSeed] = useState(null);
+  const [options, setOptions] = useState({
+    player_count: 4,
+    confidence: 0.3,
+    inference_stride: 2,
+    player_trails: true,
+    heatmap_overlay: false,
+    ball_tracking: false,
+    ball_radius: 6,
+    ball_tolerance: 15,
+  });
+  const [summary, setSummary] = useState(null);
+  const [metadata, setMetadata] = useState(null);
+  const [frameReady, setFrameReady] = useState(false);
+  const setOption = (name, value) =>
+    setOptions((o) => ({ ...o, [name]: value }));
   const [uploading, setUploading] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -400,9 +466,13 @@ function App() {
       c.getContext("2d").drawImage(video, 0, 0);
     };
     video.onloadeddata = () => {
-      if (video.duration > 0.1)
-        video.currentTime = Math.min(1, video.duration / 2);
-      else draw();
+      setMetadata({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: video.duration,
+      });
+      draw();
+      setFrameReady(true);
     };
     video.onseeked = draw;
     video.onerror = () =>
@@ -441,6 +511,20 @@ function App() {
       controller.abort();
     };
   }, [job?.id, job?.state]);
+  useEffect(() => {
+    if (job?.state !== "complete" || deleted) return;
+    const controller = new AbortController();
+    fetch(fileUrl(job.id, "summary.json"), { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) throw Error("Không tải được báo cáo kết quả.");
+        return r.json();
+      })
+      .then(setSummary)
+      .catch((e) => {
+        if (e.name !== "AbortError") setError(e.message);
+      });
+    return () => controller.abort();
+  }, [job?.id, job?.state, deleted]);
   function pick(selected) {
     if (!selected || busy) return;
     if (!selected.name.toLowerCase().endsWith(".mp4"))
@@ -451,16 +535,39 @@ function App() {
     setJob(null);
     setDeleted(false);
     setCorners([]);
+    setBallSeed(null);
+    setMetadata(null);
+    setFrameReady(false);
+    setSummary(null);
+    setOption("heatmap_overlay", false);
     setFile(selected);
   }
   async function analyze() {
     if (!file || busy) return;
+    if (options.ball_tracking && !ballSeed)
+      return setError(
+        "Hãy chọn tâm bóng ở khung hình đầu trước khi phân tích.",
+      );
+    if (corners.length > 0 && corners.length < 4)
+      return setError(
+        "Hãy chọn đủ 4 góc sân hoặc bấm Chọn lại để bỏ hiệu chỉnh.",
+      );
+    if (options.heatmap_overlay && corners.length !== 4)
+      return setError("Chọn đủ 4 góc sân để chèn heatmap vào video.");
+    setSummary(null);
     setUploading(true);
     setError("");
     setDeleted(false);
     setJob(null);
     const form = new FormData();
     form.append("video", file);
+    form.append(
+      "options",
+      JSON.stringify({
+        ...options,
+        ball_seed: options.ball_tracking ? ballSeed : null,
+      }),
+    );
     if (corners.length === 4) form.append("corners", JSON.stringify(corners));
     try {
       const r = await fetch(`${API}/jobs`, { method: "POST", body: form });
@@ -471,6 +578,7 @@ function App() {
         state: "queued",
         progress: 0,
         calibrated: corners.length === 4,
+        options: { ...options },
       });
     } catch (e) {
       setError(e.message);
@@ -514,17 +622,7 @@ function App() {
   return (
     <>
       <header className="site-header">
-        <a className="brand" href="#" aria-label="Pickleball AI — trang chủ">
-          <span className="brand-icon">
-            <ScanLine size={23} />
-          </span>
-          <span>
-            PICKLEBALL
-            <span className="brand-ai">
-              AI<span className="brand-period">.</span>
-            </span>
-          </span>
-        </a>
+        <Brand />
         <nav className={mobileNav ? "open" : ""} aria-label="Điều hướng chính">
           <a href="#overview" onClick={() => setMobileNav(false)}>
             Tổng quan
@@ -657,7 +755,7 @@ function App() {
                   ScanLine,
                   "01",
                   "Nhận diện & theo dõi",
-                  "Theo dõi tối đa 4 người chơi, gắn nhãn P1–P4 trên video.",
+                  "Theo dõi 2 hoặc 4 người chơi, gắn nhãn P1–P4 trên video.",
                 ],
                 [
                   Layers,
@@ -686,8 +784,8 @@ function App() {
               <div className="scope-note">
                 <CircleHelp size={15} />
                 <span>
-                  MVP phân tích video ngoại tuyến. Chưa theo dõi bóng, đo tốc độ
-                  hoặc tự chấm điểm.
+                  MVP phân tích video ngoại tuyến. Bám bóng theo màu ở chế độ
+                  thử nghiệm. Chưa đo tốc độ hoặc tự chấm điểm.
                 </span>
               </div>
             </div>
@@ -816,13 +914,190 @@ function App() {
                   </small>
                 </div>
               </div>
+              {file && (
+                <details className="input-video">
+                  <summary>
+                    <Play size={14} /> Xem video đầu vào{" "}
+                    {metadata && (
+                      <span>
+                        {metadata.width} × {metadata.height} ·{" "}
+                        {duration(metadata.duration)}
+                      </span>
+                    )}
+                  </summary>
+                  <video
+                    controls
+                    src={preview}
+                    preload="metadata"
+                    aria-label="Video đầu vào"
+                  />
+                  <p>
+                    Ảnh chọn sân và bóng bên dưới luôn là khung hình đầu, độc
+                    lập với thanh phát video này.
+                  </p>
+                </details>
+              )}
+              <fieldset className="analysis-options" disabled={Boolean(busy)}>
+                <legend>
+                  Thiết lập phân tích{" "}
+                  <span className="outline-tag">INPUT → OUTPUT</span>
+                </legend>
+                <div className="option-fields">
+                  <label>
+                    Số người chơi
+                    <select
+                      aria-label="Số người chơi"
+                      value={options.player_count}
+                      onChange={(e) =>
+                        setOption("player_count", Number(e.target.value))
+                      }
+                    >
+                      <option value={2}>Đánh đơn · 2 người</option>
+                      <option value={4}>Đánh đôi · 4 người</option>
+                    </select>
+                  </label>
+                  <label>
+                    Tần suất nhận diện
+                    <select
+                      aria-label="Tần suất nhận diện"
+                      value={options.inference_stride}
+                      onChange={(e) =>
+                        setOption("inference_stride", Number(e.target.value))
+                      }
+                    >
+                      <option value={1}>Mỗi khung hình · Chi tiết</option>
+                      <option value={2}>Mỗi 2 khung hình · Cân bằng</option>
+                      <option value={4}>Mỗi 4 khung hình · Nhanh hơn</option>
+                    </select>
+                  </label>
+                  <label>
+                    Độ tin cậy người chơi{" "}
+                    <output>{Math.round(options.confidence * 100)}%</output>
+                    <input
+                      aria-label="Độ tin cậy người chơi"
+                      type="range"
+                      min="0.1"
+                      max="0.9"
+                      step="0.05"
+                      value={options.confidence}
+                      onChange={(e) =>
+                        setOption("confidence", Number(e.target.value))
+                      }
+                    />
+                    <small>
+                      Tăng để lọc nhận diện yếu; có thể bỏ sót người ở xa.
+                    </small>
+                  </label>
+                </div>
+                <div className="output-options">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={options.player_trails}
+                      onChange={(e) =>
+                        setOption("player_trails", e.target.checked)
+                      }
+                    />
+                    <span>
+                      <strong>Vệt di chuyển người chơi</strong>
+                      <small>
+                        Vẽ đường đi P1–P{options.player_count} trực tiếp trong
+                        video.
+                      </small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={options.heatmap_overlay}
+                      onChange={(e) =>
+                        setOption("heatmap_overlay", e.target.checked)
+                      }
+                    />
+                    <span>
+                      <strong>Heatmap trong video</strong>
+                      <small>
+                        Cần 4 góc sân. Hiển thị mật độ vị trí người chơi ở góc
+                        video.
+                      </small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={options.ball_tracking}
+                      onChange={(e) => {
+                        setOption("ball_tracking", e.target.checked);
+                        setSelectionMode(e.target.checked ? "ball" : "court");
+                      }}
+                    />
+                    <span>
+                      <strong>
+                        Đường bóng{" "}
+                        <span className="outline-tag">THỬ NGHIỆM</span>
+                      </strong>
+                      <small>
+                        Chọn bóng vàng/xanh ở khung hình đầu. Bám theo màu, chưa
+                        phải AI bóng chuyên dụng.
+                      </small>
+                    </span>
+                  </label>
+                </div>
+                {options.ball_tracking && (
+                  <div className="ball-settings">
+                    <label>
+                      Bán kính bóng (pixel gốc){" "}
+                      <output>{options.ball_radius}px</output>
+                      <input
+                        aria-label="Bán kính bóng"
+                        type="range"
+                        min="2"
+                        max="30"
+                        value={options.ball_radius}
+                        onChange={(e) =>
+                          setOption("ball_radius", Number(e.target.value))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Dung sai màu <output>{options.ball_tolerance}</output>
+                      <input
+                        aria-label="Dung sai màu"
+                        type="range"
+                        min="5"
+                        max="40"
+                        value={options.ball_tolerance}
+                        onChange={(e) =>
+                          setOption("ball_tolerance", Number(e.target.value))
+                        }
+                      />
+                    </label>
+                    <p>
+                      Chọn chính giữa bóng trên ảnh bên dưới và chỉnh vòng tròn
+                      vừa với bóng. Màu sân/trang phục giống bóng, nhòe hoặc che
+                      khuất có thể gây bám nhầm. Đường vẽ ngắt khi không thấy
+                      bóng.
+                    </p>
+                  </div>
+                )}
+                {!file && (
+                  <p className="input-reminder">
+                    <Upload size={14} /> Tải video lên để chọn góc sân và vị trí
+                    bóng. Các tùy chọn sẽ được gửi cùng video.
+                  </p>
+                )}
+              </fieldset>
               {file && !job && (
                 <div className="calibration">
                   <div className="calibration-heading">
                     <div>
                       <h3>
-                        <Crosshair size={18} /> Hiệu chỉnh sân{" "}
-                        <span className="outline-tag">TÙY CHỌN</span>
+                        <Crosshair size={18} /> Chuẩn bị khung hình đầu{" "}
+                        <span className="outline-tag">
+                          {options.ball_tracking || options.heatmap_overlay
+                            ? "CẦN CHỌN ĐẦU VÀO"
+                            : "TÙY CHỌN"}
+                        </span>
                       </h3>
                       <p>
                         Chọn 4 góc ngoài của sân theo thứ tự: trên trái → trên
@@ -832,26 +1107,80 @@ function App() {
                     </div>
                     <button
                       className="secondary"
-                      onClick={() => setCorners([])}
+                      onClick={() => {
+                        setCorners([]);
+                        setBallSeed(null);
+                      }}
                     >
                       <RotateCcw size={14} /> Chọn lại
                     </button>
                   </div>
+                  <div className="selection-toolbar">
+                    <button
+                      type="button"
+                      className={
+                        selectionMode === "court"
+                          ? "secondary active"
+                          : "secondary"
+                      }
+                      onClick={() => setSelectionMode("court")}
+                    >
+                      <Crosshair size={14} /> Chọn 4 góc sân
+                    </button>
+                    {options.ball_tracking && (
+                      <button
+                        type="button"
+                        className={
+                          selectionMode === "ball"
+                            ? "secondary active"
+                            : "secondary"
+                        }
+                        onClick={() => setSelectionMode("ball")}
+                      >
+                        <ScanLine size={14} /> Chọn tâm bóng
+                      </button>
+                    )}
+                    <span>
+                      {metadata
+                        ? `${metadata.width} × ${metadata.height} · ${duration(metadata.duration)} · Khung hình đầu`
+                        : "Đang đọc video…"}
+                    </span>
+                  </div>
+                  {options.ball_tracking && (
+                    <p className="selection-hint">
+                      {ballSeed
+                        ? "Đã chọn tâm bóng. Nhấn Chọn tâm bóng để chọn lại."
+                        : "Chưa chọn bóng — chuyển sang Chọn tâm bóng, rồi nhấn vào chính giữa bóng."}
+                    </p>
+                  )}
                   <div
                     className="calframe"
                     onClick={(e) => {
                       const r = e.currentTarget.getBoundingClientRect();
-                      if (corners.length < 4)
-                        setCorners([
-                          ...corners,
-                          [
-                            (e.clientX - r.left) / r.width,
-                            (e.clientY - r.top) / r.height,
-                          ],
-                        ]);
+                      if (!frameReady || uploading) return;
+                      const point = [
+                        (e.clientX - r.left) / r.width,
+                        (e.clientY - r.top) / r.height,
+                      ];
+                      if (selectionMode === "ball" && options.ball_tracking)
+                        setBallSeed(point);
+                      else if (corners.length < 4)
+                        setCorners([...corners, point]);
                     }}
                   >
                     <canvas ref={canvas} />
+                    {options.ball_tracking && ballSeed && metadata && (
+                      <span
+                        className="ball-seed"
+                        style={{
+                          left: `${ballSeed[0] * 100}%`,
+                          top: `${ballSeed[1] * 100}%`,
+                          width: `${((options.ball_radius * 2) / metadata.width) * 100}%`,
+                        }}
+                      >
+                        <span>BÓNG</span>
+                      </span>
+                    )}
                     {corners.map(([x, y], i) => (
                       <span
                         className="corner-dot"
@@ -871,7 +1200,7 @@ function App() {
                       )}{" "}
                       {corners.length}/4 góc đã chọn
                     </span>
-                    <span>Bỏ qua để chỉ xuất video theo dõi người chơi.</span>
+                    <span>Bỏ qua góc sân để xuất video không có heatmap.</span>
                   </div>
                 </div>
               )}
@@ -969,11 +1298,60 @@ function App() {
                   <div className="result-video">
                     <div className="result-title">
                       <h3>
-                        <Video size={17} /> Video theo dõi người chơi
+                        <Video size={17} /> Video phân tích
                       </h3>
-                      <span className="outline-tag">P1 — P4</span>
+                      <span className="outline-tag">
+                        P1 — P{job.options?.player_count || 4}
+                      </span>
                     </div>
                     <video controls src={fileUrl(job.id, "annotated.mp4")} />
+                    <div className="output-manifest">
+                      <span>
+                        <Check size={13} /> Nhãn người chơi
+                      </span>
+                      {job.options?.player_trails && (
+                        <span>
+                          <Check size={13} /> Vệt di chuyển
+                        </span>
+                      )}
+                      {job.options?.heatmap_overlay && (
+                        <span>
+                          <Check size={13} /> Heatmap trong video
+                        </span>
+                      )}
+                      {job.options?.ball_tracking && (
+                        <span>
+                          <ScanLine size={13} /> Bóng · Thử nghiệm
+                        </span>
+                      )}
+                    </div>
+                    {summary && (
+                      <div className="analysis-report">
+                        <strong>
+                          {summary.tracked_players} người chơi được gán ID ·{" "}
+                          {summary.frames} khung hình
+                        </strong>
+                        {summary.ball_tracking?.enabled && (
+                          <p>
+                            Bóng được quan sát:{" "}
+                            {summary.ball_tracking.detected_frames}/
+                            {summary.ball_tracking.total_frames} khung hình (
+                            {Math.round(summary.ball_tracking.coverage * 100)}
+                            %). Đây là tỉ lệ có điểm bám màu, không phải độ
+                            chính xác.
+                          </p>
+                        )}
+                        {summary.warnings?.length > 0 && (
+                          <p className="warning-text">
+                            Bám bóng theo màu có thể bỏ sót hoặc nhận nhầm. Kiểm
+                            tra video trước khi sử dụng dữ liệu.
+                            {summary.ball_tracking?.detected_frames === 0
+                              ? " Không tìm thấy bóng; hãy chọn lại tâm và bán kính."
+                              : ""}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div className="export-actions">
                       <a
                         className="primary"
@@ -988,6 +1366,22 @@ function App() {
                         download
                       >
                         <Download size={16} /> Dữ liệu JSON
+                      </a>
+                      {job.options?.ball_tracking && (
+                        <a
+                          className="secondary"
+                          href={fileUrl(job.id, "ball.json")}
+                          download
+                        >
+                          <Download size={16} /> Dữ liệu bóng
+                        </a>
+                      )}
+                      <a
+                        className="secondary"
+                        href={fileUrl(job.id, "summary.json")}
+                        download
+                      >
+                        <Download size={16} /> Báo cáo JSON
                       </a>
                     </div>
                   </div>
@@ -1042,17 +1436,7 @@ function App() {
         </section>
       </main>
       <footer className="site-footer section-width">
-        <a className="brand" href="#">
-          <span className="brand-icon">
-            <ScanLine size={20} />
-          </span>
-          <span>
-            PICKLEBALL
-            <span className="brand-ai">
-              AI<span className="brand-period">.</span>
-            </span>
-          </span>
-        </a>
+        <Brand />
         <span>A NEW PERSPECTIVE ON YOUR GAME.</span>
         <span className="footer-version">
           BUILT FOR THE COURT <span> / MVP 0.1</span>
