@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class AnalysisOptions(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
+    start_time_s: float = Field(default=0.0, ge=0)
     player_count: Literal[2, 4] = 4
     player_names: list[str] | None = None
     player_seeds: list[tuple[float, float]] | None = None
@@ -60,5 +61,5 @@ class AnalysisOptions(BaseModel):
             raise ValueError('Số tên phải khớp số người chơi (2 hoặc 4).')
         self.player_names = [name or f'P{i+1}' for i, name in enumerate(self.player_names or [''] * self.player_count)]
         if self.ball_tracking and self.ball_seed is None:
-            raise ValueError('Hãy chọn tâm bóng trên khung hình đầu tiên.')
+            raise ValueError('Hãy chọn tâm bóng trên khung hình bắt đầu đã chọn.')
         return self

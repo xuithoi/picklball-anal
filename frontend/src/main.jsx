@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import "./style.css";
 import { requestJson } from "./api.js";
+import VideoFramePicker, { frameTime } from "./VideoFramePicker.jsx";
 
 const API = "/api";
 const fileUrl = (id, name) => `${API}/jobs/${id}/files/${name}`;
@@ -436,6 +437,7 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [frameReady, setFrameReady] = useState(false);
+  const [startTime, setStartTime] = useState(0);
   const setOption = (name, value) =>
     setOptions((o) => ({ ...o, [name]: value }));
   const [uploading, setUploading] = useState(false);
@@ -458,41 +460,21 @@ function App() {
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  useEffect(() => {
-    if (!preview || job) return;
-    const video = document.createElement("video");
-    let disposed = false;
-    video.preload = "auto";
-    video.muted = true;
-    video.src = preview;
-    const draw = () => {
-      if (disposed || !canvas.current) return;
-      const c = canvas.current;
-      c.width = video.videoWidth;
-      c.height = video.videoHeight;
-      c.getContext("2d").drawImage(video, 0, 0);
-    };
-    video.onloadeddata = () => {
-      setMetadata({
-        width: video.videoWidth,
-        height: video.videoHeight,
-        duration: video.duration,
-      });
-      draw();
-      setFrameReady(true);
-    };
-    video.onseeked = draw;
-    video.onerror = () =>
-      setError("Không thể xem trước video này. Hãy chọn MP4 mã hóa H.264.");
-    return () => {
-      disposed = true;
-      video.onloadeddata = null;
-      video.onseeked = null;
-      video.onerror = null;
-      video.removeAttribute("src");
-      video.load();
-    };
-  }, [preview, job?.id]);
+  function confirmFrame(image, info) {
+    if (!canvas.current) return;
+    const target = canvas.current;
+    target.width = info.width;
+    target.height = info.height;
+    target.getContext("2d").drawImage(image, 0, 0);
+    setMetadata({ width: info.width, height: info.height, duration: info.duration });
+    setStartTime(info.time);
+    setFrameReady(true);
+    setCorners([]);
+    setBallSeed(null);
+    setPlayerSeeds([null, null, null, null]);
+    setSelectionMode("court");
+    setError("");
+  }
   useEffect(() => {
     if (!job?.id || ["complete", "failed", "expired"].includes(job.state))
       return;
@@ -545,6 +527,7 @@ function App() {
     setPlayerSeeds([null, null, null, null]);
     setMetadata(null);
     setFrameReady(false);
+    setStartTime(0);
     setSummary(null);
     setOption("heatmap_overlay", false);
     setOption("minimap_overlay", false);
@@ -553,9 +536,10 @@ function App() {
   }
   async function analyze() {
     if (!file || busy) return;
+    if (!frameReady) return setError("Chờ video tải xong rồi xác nhận khung hình bắt đầu.");
     if (options.ball_tracking && !ballSeed)
       return setError(
-        "Hãy chọn tâm bóng ở khung hình đầu trước khi phân tích.",
+        "Hãy chọn tâm bóng ở khung hình đã chọn trước khi phân tích.",
       );
     if (corners.length > 0 && corners.length < 4)
       return setError(
@@ -566,7 +550,7 @@ function App() {
     const named = playerNames.slice(0, options.player_count).some((name) => name.trim());
     const seeds = playerSeeds.slice(0, options.player_count);
     if ((named || seeds.some(Boolean)) && seeds.some((point) => !point))
-      return setError("Hãy chọn vị trí cho đủ người chơi trên khung hình đầu để gán tên đúng người.");
+      return setError("Hãy chọn vị trí cho đủ người chơi trên khung hình đã chọn để gán tên đúng người.");
     setSummary(null);
     setUploading(true);
     setError("");
@@ -578,6 +562,7 @@ function App() {
       "options",
       JSON.stringify({
         ...options,
+        start_time_s: startTime,
         player_names: playerNames.slice(0, options.player_count),
         player_seeds: seeds.every(Boolean) ? seeds : null,
         ball_seed: options.ball_tracking ? ballSeed : null,
@@ -595,6 +580,7 @@ function App() {
         calibrated: corners.length === 4,
         options: {
           ...options,
+          start_time_s: startTime,
           player_names: playerNames
             .slice(0, options.player_count)
             .map((name, i) => name.trim() || `P${i + 1}`),
@@ -934,26 +920,10 @@ function App() {
                 </div>
               </div>
               {file && (
-                <details className="input-video">
-                  <summary>
-                    <Play size={14} /> Xem video đầu vào{" "}
-                    {metadata && (
-                      <span>
-                        {metadata.width} × {metadata.height} ·{" "}
-                        {duration(metadata.duration)}
-                      </span>
-                    )}
-                  </summary>
-                  <video
-                    controls
-                    src={preview}
-                    preload="metadata"
-                    aria-label="Video đầu vào"
-                  />
-                  <p>
-                    Ảnh chọn sân và bóng bên dưới luôn là khung hình đầu, độc
-                    lập với thanh phát video này.
-                  </p>
+                <details className="input-video" open>
+                  <summary><Play size={14} /> Chọn khung hình bắt đầu phân tích</summary>
+                  <VideoFramePicker src={preview} selectedTime={startTime}
+                    disabled={Boolean(busy || job)} onConfirm={confirmFrame} onError={setError} />
                 </details>
               )}
               <fieldset className="analysis-options" disabled={Boolean(busy)}>
@@ -1047,7 +1017,7 @@ function App() {
                       ))}
                   </div>
                   <p>
-                    Tự nhập tên, rồi chọn vị trí từng người trên khung hình đầu bên dưới.
+                    Tự nhập tên, rồi chọn vị trí từng người trên khung hình đã chọn bên dưới.
                     Hệ thống không tự nhận diện tên hay lấy tên từ demo.
                     Để trống tên sẽ dùng P1–P{options.player_count}.
                     AI vẫn có thể nhầm ID khi người chơi bị che khuất; hãy kiểm tra nhãn trong kết quả.
@@ -1121,7 +1091,7 @@ function App() {
                         <span className="outline-tag">THỬ NGHIỆM</span>
                       </strong>
                       <small>
-                        Chọn bóng vàng/xanh ở khung hình đầu. Bám theo màu, chưa
+                        Chọn bóng vàng/xanh ở khung hình đã chọn. Bám theo màu, chưa
                         phải AI bóng chuyên dụng.
                       </small>
                     </span>
@@ -1176,7 +1146,7 @@ function App() {
                   <div className="calibration-heading">
                     <div>
                       <h3>
-                        <Crosshair size={18} /> Chuẩn bị khung hình đầu{" "}
+                        <Crosshair size={18} /> Chuẩn bị khung hình đã chọn{" "}
                         <span className="outline-tag">
                           {options.ball_tracking || needsCourt || playerNames.slice(0, options.player_count).some((name) => name.trim())
                             ? "CẦN CHỌN ĐẦU VÀO"
@@ -1228,7 +1198,7 @@ function App() {
                     )}
                     <span>
                       {metadata
-                        ? `${metadata.width} × ${metadata.height} · ${duration(metadata.duration)} · Khung hình đầu`
+                        ? `${metadata.width} × ${metadata.height} · ${duration(metadata.duration)} · Khung đã chọn ${frameTime(startTime)}`
                         : "Đang đọc video…"}
                     </span>
                   </div>
@@ -1459,6 +1429,7 @@ function App() {
                           {summary.tracked_players} người chơi được gán ID ·{" "}
                           {summary.frames} khung hình
                         </strong>
+                        <p>Bắt đầu từ {frameTime(summary.start_time_s || 0)} của video gốc. Các mốc trong kết quả tính từ 00:00 của đoạn đã chọn.</p>
                         {summary.ball_tracking?.enabled && (
                           <p>
                             Bóng được quan sát:{" "}

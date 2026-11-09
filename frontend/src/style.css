@@ -2128,3 +2128,14 @@ input[type="range"] {
   overflow-wrap: anywhere;
   pointer-events: none;
 }
+
+.frame-timeline { display: grid; gap: 10px; margin: 16px 0; }
+.frame-timeline span { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #b5c7a7; }
+.frame-timeline output { font-family: monospace; white-space: nowrap; }
+.frame-timeline input { width: 100%; accent-color: var(--lime); }
+.frame-picker-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.frame-picker p { line-height: 1.6; }
+.frame-picker button:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .frame-timeline span { flex-direction: column; }
+}

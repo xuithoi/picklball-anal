@@ -1,6 +1,6 @@
 # Pickleball Kun AI — React + FastAPI + YOLO11 + ByteTrack
 
-A runnable proof-of-concept for **offline processing of uploaded MP4 video**. Includes optional experimental ball color tracking initialized by selecting the ball on the first frame. No live camera, speed measurement or automatic scoring.
+A runnable proof-of-concept for **offline processing of uploaded MP4 video**. Includes optional experimental ball color tracking initialized by selecting the ball on the chosen starting frame. No live camera, speed measurement or automatic scoring.
 
 Deployment on Botkeep or Render: see [DEPLOY.md](DEPLOY.md) for the combined Docker image, resources, access password and persistent storage.
 
@@ -67,7 +67,7 @@ Then open http://localhost:5173.
 
 ## Suggested next iterations
 
-- Add manual P1–P4 assignment at the first frame, track recovery and court ROI filtering.
+- Add manual P1–P4 assignment at the starting frame, track recovery and court ROI filtering.
 - Add per-player heatmaps, timeline scrubbing with position overlay, and video preview calibration editing.
 - Add durable queue and GPU acceleration.
 
@@ -106,19 +106,21 @@ AI accuracy still needs evaluation on representative pickleball match footage.
 
 ## Inputs and video overlays
 
-The UI provides an original-video player, a fixed first-frame canvas, court-corner
+The UI provides an original-video player, a confirmed-frame canvas, court-corner
 selection, singles/doubles selection, person confidence, inference stride, and
 checkboxes for player trails, heatmap inset and experimental ball tracking.
 
 For the ball tracker, enable the option, choose **Chọn tâm bóng**, click the center
-of the yellow/green ball on the first frame, and adjust the radius in source-video
-pixels and hue tolerance. A bright saturated seed is required. The frame used for
-selection is always frame zero, independent of the original-video playback position.
+of the yellow/green ball on the confirmed starting frame, and adjust the radius in source-video
+pixels and hue tolerance. A bright saturated seed is required. Seek or play/pause
+the preview, then press **Dùng khung hình này** to update the selection canvas.
+Confirming a frame clears court corners, player positions and the ball seed.
 
 `options` is a multipart form field containing JSON. Defaults:
 
 ```json
 {
+  "start_time_s": 0,
   "player_count": 4,
   "confidence": 0.3,
   "inference_stride": 2,
@@ -171,14 +173,14 @@ P-number. The multipart `options.player_names` array must contain exactly
 per-frame player observations (`name`) and summary roster (`players`).
 
 After entering names, use the P1–P4 (or P1–P2) selection buttons to click the
-middle of each corresponding athlete's torso on the uploaded video's first frame.
+middle of each corresponding athlete's torso on the confirmed starting frame.
 Select every athlete when supplying names or positions. Court-corner numbers are
 separate from athlete labels. Names are entered by the user, never inferred from
 the demo or recognized automatically.
 
 The optional `options.player_seeds` is an array of normalized `[x,y]` points in
 roster order, with exactly `player_count` distinct entries. The backend binds each
-point to a distinct person detection containing it on the first frame. It rejects
+point to a distinct person detection containing it on the starting frame. It rejects
 unmatched positions rather than assigning names by detection order. Later unknown
 tracker IDs are ignored when manual assignments are supplied. Without positions,
 API clients retain the original detection-order behavior. Tracking can still switch
@@ -198,7 +200,7 @@ to an existing Unicode TrueType font path.
 
 The default player marker is a double ellipse at the detected foot position.
 Uncheck **Vòng màu dưới chân** to use bounding boxes instead. Marker colors match
-the P1–P4 name/position selectors. Names still come from user input and first-frame
+the P1–P4 name/position selectors. Names still come from user input and starting-frame
 manual assignments; the renderer does not recognize athlete identity.
 
 Enable **Minimap trong video** for a frame-updated player map at the bottom left,
@@ -224,3 +226,40 @@ this change does not add a trained ball detector, hit/bounce detection or 3D tra
 Deployment order: update/rebuild the EC2 backend from this feature branch before
 rolling out the frontend. An older backend rejects the new option names. Merging
 or deploying Cloudflare alone does not update the Python container on EC2.
+
+
+## Choose the analysis start frame
+
+The input-video panel opens automatically after upload. Play/pause the video,
+use its native controls or the millisecond timeline, and use the fine seek buttons
+(steps of 1/30 second) to find a frame with a visible ball and all athletes. These
+are time steps, not a claim of one decoded frame on every frame rate. Press
+**Dùng khung hình này**; the selected image is copied to the calibration canvas.
+The selected source timestamp is displayed to millisecond precision. Previewing
+another time does not change existing selections until the frame is confirmed.
+
+Confirmation resets court corners, athlete positions and ball seed while preserving
+entered names and analysis options. Select those points again on the new image.
+Modern `requestVideoFrameCallback` support is required for selecting nonzero start
+frames. Older browsers can still select the first frame. The timestamp comes from
+the displayed frame's media timestamp, rounded down to microseconds, rather than
+assuming the file is 30 fps. A paused seek that stays within the same frame reuses
+its timestamp only after verifying that the decoded image is unchanged.
+
+`options.start_time_s` is a finite, nonnegative source timestamp (default 0). The
+backend streams timestamp-seeked frames from FFmpeg when it is nonzero; it does
+not create a second trimmed copy of the upload. Person IDs, ball seed and court
+calibration initialize at this point. The earlier part of the source is omitted
+from annotated video, positions, ball observations, court snapshots and heatmaps.
+A start at or beyond the known source duration fails with an explanatory message.
+
+`summary.json` records `start_time_s` and `timeline: "output_relative"`.
+`positions.json` and `ball.json` times, output video and reported duration begin
+at zero for the processed segment. As in the existing renderer, output cadence
+is constant at the FPS reported for the source: variable-frame-rate input is
+accepted for frame selection, but exported per-frame times describe the output
+cadence, not a reconstruction of every original VFR presentation timestamp.
+FFmpeg is required for timestamp starts and is included in the Docker image.
+
+Update the EC2 backend before deploying the new frontend: older backend versions
+do not accept `start_time_s`. No new model or dependency package is needed.
