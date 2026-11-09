@@ -41,6 +41,24 @@ def heatmap_image(heat, court):
     return (court * (1 - alpha) + colored * alpha).astype(np.uint8)
 
 
+def bind_player_seeds(boxes, ids, seeds, width, height):
+    """Bind clicked athletes to distinct first-frame tracker IDs, never detection order."""
+    from scipy.optimize import linear_sum_assignment
+    error = 'Không nhận diện đủ người tại vị trí đã chọn ở khung hình đầu. Chọn lại giữa thân từng người hoặc giảm độ tin cậy.'
+    if len(boxes) < len(seeds) or len(set(ids)) != len(ids):
+        raise ValueError(error)
+    costs = np.full((len(seeds), len(boxes)), 1e6)
+    for slot, (sx, sy) in enumerate(seeds):
+        x, y = sx * width, sy * height
+        for index, (x1, y1, x2, y2) in enumerate(boxes):
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                costs[slot, index] = ((x - (x1+x2)/2) / max(x2-x1, 1))**2 + ((y - (y1+y2)/2) / max(y2-y1, 1))**2
+    rows, columns = linear_sum_assignment(costs)
+    if len(rows) != len(seeds) or any(costs[r, c] >= 1e6 for r, c in zip(rows, columns)):
+        raise ValueError(error)
+    return {ids[c]: int(r) + 1 for r, c in zip(rows, columns)}
+
+
 def process_video(input_file: Path, out: Path, corners, progress, options=None):
     settings = AnalysisOptions.model_validate(options or {})
     if settings.heatmap_overlay and not corners:
@@ -92,6 +110,11 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             if analyzed:
                 result = model.track(frame, persist=True, tracker='bytetrack.yaml', classes=[0], conf=settings.confidence, verbose=False)[0]
                 observations = []
+                if frame_idx == 0 and settings.player_seeds is not None:
+                    boxes = result.boxes
+                    if boxes is None or boxes.id is None:
+                        raise ValueError('Không thấy người chơi ở khung hình đầu. Chọn video có đủ người hoặc giảm độ tin cậy.')
+                    id_to_slot = bind_player_seeds(boxes.xyxy.cpu().numpy(), boxes.id.int().cpu().tolist(), settings.player_seeds, width, height)
                 if result.boxes is not None and result.boxes.id is not None:
                     boxes = result.boxes.xyxy.cpu().numpy()
                     ids = result.boxes.id.int().cpu().tolist()
@@ -105,6 +128,8 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                                 continue
                             point = [float(np.clip(xp, 0, W-1)), float(np.clip(yp, 0, H-1))]
                         if track_id not in id_to_slot:
+                            if settings.player_seeds is not None:
+                                continue
                             if len(id_to_slot) >= settings.player_count:
                                 continue
                             id_to_slot[track_id] = len(id_to_slot) + 1

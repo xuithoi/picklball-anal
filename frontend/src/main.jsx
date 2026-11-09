@@ -21,6 +21,7 @@ import {
   Menu,
 } from "lucide-react";
 import "./style.css";
+import { requestJson } from "./api.js";
 
 const API = "/api";
 const fileUrl = (id, name) => `${API}/jobs/${id}/files/${name}`;
@@ -417,6 +418,7 @@ function App() {
   const [corners, setCorners] = useState([]);
   const [selectionMode, setSelectionMode] = useState("court");
   const [ballSeed, setBallSeed] = useState(null);
+  const [playerSeeds, setPlayerSeeds] = useState([null, null, null, null]);
   const [options, setOptions] = useState({
     player_count: 4,
     confidence: 0.3,
@@ -497,7 +499,7 @@ function App() {
           signal: controller.signal,
         });
         if (r.ok) {
-          setJob(await r.json());
+          setJob(await requestJson(r, "Không lấy được trạng thái tác vụ.", (data) => typeof data.id === "string" && typeof data.state === "string"));
           setError("");
         } else if ([404, 410].includes(r.status)) {
           setJob((j) => ({ ...j, state: "expired" }));
@@ -517,8 +519,7 @@ function App() {
     const controller = new AbortController();
     fetch(fileUrl(job.id, "summary.json"), { signal: controller.signal })
       .then(async (r) => {
-        if (!r.ok) throw Error("Không tải được báo cáo kết quả.");
-        return r.json();
+        return requestJson(r, "Không tải được báo cáo kết quả.");
       })
       .then(setSummary)
       .catch((e) => {
@@ -537,6 +538,7 @@ function App() {
     setDeleted(false);
     setCorners([]);
     setBallSeed(null);
+    setPlayerSeeds([null, null, null, null]);
     setMetadata(null);
     setFrameReady(false);
     setSummary(null);
@@ -555,6 +557,10 @@ function App() {
       );
     if (options.heatmap_overlay && corners.length !== 4)
       return setError("Chọn đủ 4 góc sân để chèn heatmap vào video.");
+    const named = playerNames.slice(0, options.player_count).some((name) => name.trim());
+    const seeds = playerSeeds.slice(0, options.player_count);
+    if ((named || seeds.some(Boolean)) && seeds.some((point) => !point))
+      return setError("Hãy chọn vị trí cho đủ người chơi trên khung hình đầu để gán tên đúng người.");
     setSummary(null);
     setUploading(true);
     setError("");
@@ -567,14 +573,15 @@ function App() {
       JSON.stringify({
         ...options,
         player_names: playerNames.slice(0, options.player_count),
+        player_seeds: seeds.every(Boolean) ? seeds : null,
         ball_seed: options.ball_tracking ? ballSeed : null,
       }),
     );
     if (corners.length === 4) form.append("corners", JSON.stringify(corners));
     try {
+      await requestJson(await fetch(`${API}/health`), "Không kết nối được máy chủ phân tích.", (data) => data.ok === true);
       const r = await fetch(`${API}/jobs`, { method: "POST", body: form });
-      const data = await r.json();
-      if (!r.ok) throw Error(data.detail || "Không thể tải video lên.");
+      const data = await requestJson(r, "Không thể tải video lên.", (value) => typeof value.id === "string" && value.id.length > 0);
       setJob({
         id: data.id,
         state: "queued",
@@ -588,7 +595,7 @@ function App() {
         },
       });
     } catch (e) {
-      setError(e.message);
+      setError(e instanceof TypeError ? "Không kết nối được máy chủ phân tích. Vui lòng thử lại." : e.message);
     } finally {
       setUploading(false);
     }
@@ -613,8 +620,7 @@ function App() {
         { method: confirmDownload ? "POST" : "DELETE" },
       );
       if (!r.ok) {
-        const data = await r.json();
-        throw Error(data.detail || "Không thể xóa tệp.");
+        await requestJson(r, "Không thể xóa tệp.");
       }
       setDeleted(true);
       setError("");
@@ -1035,9 +1041,10 @@ function App() {
                       ))}
                   </div>
                   <p>
-                    Tên gắn với nhãn P1–P{options.player_count} theo thứ tự AI
-                    phát hiện, không phải nhận diện danh tính. Hãy kiểm tra nhãn
-                    trong video. Để trống sẽ dùng P1–P{options.player_count}.
+                    Tự nhập tên, rồi chọn vị trí từng người trên khung hình đầu bên dưới.
+                    Hệ thống không tự nhận diện tên hay lấy tên từ demo.
+                    Để trống tên sẽ dùng P1–P{options.player_count}.
+                    AI vẫn có thể nhầm ID khi người chơi bị che khuất; hãy kiểm tra nhãn trong kết quả.
                   </p>
                 </div>
                 <div className="output-options">
@@ -1145,7 +1152,7 @@ function App() {
                       <h3>
                         <Crosshair size={18} /> Chuẩn bị khung hình đầu{" "}
                         <span className="outline-tag">
-                          {options.ball_tracking || options.heatmap_overlay
+                          {options.ball_tracking || options.heatmap_overlay || playerNames.slice(0, options.player_count).some((name) => name.trim())
                             ? "CẦN CHỌN ĐẦU VÀO"
                             : "TÙY CHỌN"}
                         </span>
@@ -1161,6 +1168,8 @@ function App() {
                       onClick={() => {
                         setCorners([]);
                         setBallSeed(null);
+                        setPlayerSeeds([null, null, null, null]);
+                        setSelectionMode("court");
                       }}
                     >
                       <RotateCcw size={14} /> Chọn lại
@@ -1204,6 +1213,19 @@ function App() {
                         : "Chưa chọn bóng — chuyển sang Chọn tâm bóng, rồi nhấn vào chính giữa bóng."}
                     </p>
                   )}
+                  <div className="selection-toolbar" aria-label="Gán tên cho người chơi">
+                    {playerNames.slice(0, options.player_count).map((name, i) => (
+                      <button type="button" key={i}
+                        className={selectionMode === `player-${i}` ? "secondary active" : "secondary"}
+                        onClick={() => setSelectionMode(`player-${i}`)}>
+                        {playerSeeds[i] ? "✓ " : ""}Chọn P{i + 1}{name.trim() ? ` · ${name.trim()}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="selection-hint">
+                    Chọn nút P1–P{options.player_count}, rồi nhấn vào giữa thân người tương ứng trong ảnh. Chọn lại nút rồi nhấn vào ảnh để sửa vị trí.
+                    Các số 1–4 đánh dấu góc sân, không phải vận động viên.
+                  </p>
                   <div
                     className="calframe"
                     onClick={(e) => {
@@ -1213,7 +1235,11 @@ function App() {
                         (e.clientX - r.left) / r.width,
                         (e.clientY - r.top) / r.height,
                       ];
-                      if (selectionMode === "ball" && options.ball_tracking)
+                      if (selectionMode.startsWith("player-")) {
+                        const index = Number(selectionMode.split("-")[1]);
+                        if (index >= options.player_count) return;
+                        setPlayerSeeds((current) => current.map((value, i) => i === index ? point : value));
+                      } else if (selectionMode === "ball" && options.ball_tracking)
                         setBallSeed(point);
                       else if (corners.length < 4)
                         setCorners([...corners, point]);
@@ -1232,6 +1258,12 @@ function App() {
                         <span>BÓNG</span>
                       </span>
                     )}
+                    {playerSeeds.slice(0, options.player_count).map((point, i) => point && (
+                      <span className="player-seed" key={`player-${i}`}
+                        style={{ left: `${point[0] * 100}%`, top: `${point[1] * 100}%`, color: players[i] }}>
+                        P{i + 1}{playerNames[i].trim() ? ` · ${playerNames[i].trim()}` : ""}
+                      </span>
+                    ))}
                     {corners.map(([x, y], i) => (
                       <span
                         className="corner-dot"

@@ -166,9 +166,25 @@ P-number. The multipart `options.player_names` array must contain exactly
 `player_count` entries when supplied. Names appear in the video, court PNG,
 per-frame player observations (`name`) and summary roster (`players`).
 
-Slots follow the first tracker IDs detected, not athlete identity or team membership.
-Review labels before relying on the name association; automatic identity assignment,
-manual player-to-detection mapping and recovery from ID switches are not implemented.
+After entering names, use the P1–P4 (or P1–P2) selection buttons to click the
+middle of each corresponding athlete's torso on the uploaded video's first frame.
+Select every athlete when supplying names or positions. Court-corner numbers are
+separate from athlete labels. Names are entered by the user, never inferred from
+the demo or recognized automatically.
+
+The optional `options.player_seeds` is an array of normalized `[x,y]` points in
+roster order, with exactly `player_count` distinct entries. The backend binds each
+point to a distinct person detection containing it on the first frame. It rejects
+unmatched positions rather than assigning names by detection order. Later unknown
+tracker IDs are ignored when manual assignments are supplied. Without positions,
+API clients retain the original detection-order behavior. Tracking can still switch
+IDs during occlusion; identity recovery and team recognition are not implemented.
+
+The frontend checks `/api/health` before uploading video and reports an actionable
+error for empty, HTML, malformed, or unexpected JSON responses. Cloudflare static
+asset hosting serves only the frontend: `/api/*` must reach the FastAPI backend to
+process videos. Vite's development proxy does not configure production routing.
+Frontend API response regression checks: `cd frontend && node --test src/api.test.js`.
 Unicode overlays use DejaVu Sans (`fonts-dejavu-core` in the Docker image). Native
 installs require `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`, or set `LABEL_FONT`
 to an existing Unicode TrueType font path.
