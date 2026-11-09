@@ -263,3 +263,34 @@ FFmpeg is required for timestamp starts and is included in the Docker image.
 
 Update the EC2 backend before deploying the new frontend: older backend versions
 do not accept `start_time_s`. No new model or dependency package is needed.
+
+## Fine ball seed selection and retry
+
+After choosing an approximate ball position on the calibration image, the ball
+editor shows a pixelated close-up of that region. Click the close-up to recenter
+or use the on-screen arrows / keyboard arrow keys to move one original-video
+pixel at a time. The displayed coordinates and radius refer to original pixels,
+regardless of CSS/video scaling. Confirming a different starting frame clears the
+seed and close-up. Failed jobs offer **Chỉnh lại đầu vào**, preserving the uploaded
+file, selected frame and points so the ball seed can be adjusted without selecting
+or uploading the file again until a new analysis is requested.
+
+The color tracker initializes from a small local region rather than the exact
+clicked pixel. It searches nearby yellow/green blobs, rejects oversized/nonround
+regions, samples the median colored pixels (excluding white highlights), and
+estimates the initial ball radius. This helps with a slightly missed click or a
+small ball whose default radius was too large. It does not add a learned detector
+or support fully white/occluded balls. Similar nearby objects can still be chosen;
+use the close-up and verify the output. A missing plausible local blob gives an
+instruction to adjust the seed/radius or choose another starting frame.
+
+`summary.ball_tracking.seed_xy` records the refined initial center in source
+pixels; `effective_radius` records the estimated initial radius. The original
+requested seed/radius remain in `summary.options`. Subsequent missing detections
+still create explicit gaps rather than synthetic observations.
+
+The custom backend domain (e.g. `pickleballmvp.run.place`) serves the frontend
+bundled in the EC2 Docker image. A Cloudflare Worker deployment only updates the
+`workers.dev` frontend. To update the backend-domain UI, switch the EC2 checkout
+back to `main`, pull merged code, rebuild `pickleball-ai`, and recreate the Compose
+backend. Reload the browser after the new container is healthy.
