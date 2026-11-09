@@ -17,7 +17,7 @@ class ColorBallTracker:
         hsv = cv2.cvtColor(first_frame, cv2.COLOR_BGR2HSV)
         self.color = hsv[y, x].astype(float)
         if self.color[1] < 40 or self.color[2] < 40:
-            raise ValueError('Chọn lại tâm bóng màu vàng/xanh sáng ở khung hình đầu. Chế độ thử nghiệm chưa phù hợp bóng trắng hoặc bóng bị che khuất.')
+            raise ValueError('Chọn lại tâm bóng màu vàng/xanh sáng ở khung hình bắt đầu đã chọn. Chế độ thử nghiệm chưa phù hợp bóng trắng hoặc bóng bị che khuất.')
         self.velocity = np.zeros(2)
         self.missing = 0
         self.path = deque(maxlen=trail_length)

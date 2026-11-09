@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from .ball import ColorBallTracker
+from .video import TimestampDecoder
 from .options import AnalysisOptions
 from .labels import draw_labels
 from .overlays import W, H, COLORS, CourtOverlay, draw_player, draw_fading_trail
@@ -39,9 +40,9 @@ def heatmap_image(heat, court):
 
 
 def bind_player_seeds(boxes, ids, seeds, width, height):
-    """Bind clicked athletes to distinct first-frame tracker IDs, never detection order."""
+    """Bind clicked athletes to distinct starting-frame tracker IDs, never detection order."""
     from scipy.optimize import linear_sum_assignment
-    error = 'Không nhận diện đủ người tại vị trí đã chọn ở khung hình đầu. Chọn lại giữa thân từng người hoặc giảm độ tin cậy.'
+    error = 'Không nhận diện đủ người tại vị trí đã chọn ở khung hình bắt đầu đã chọn. Chọn lại giữa thân từng người hoặc giảm độ tin cậy.'
     if len(boxes) < len(seeds) or len(set(ids)) != len(ids):
         raise ValueError(error)
     costs = np.full((len(seeds), len(boxes)), 1e6)
@@ -62,6 +63,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         raise ValueError('Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.')
     cap = cv2.VideoCapture(str(input_file))
     writer = None
+    decoder = None
     try:
         if not cap.isOpened():
             raise RuntimeError('Cannot read video; use H.264 MP4')
@@ -73,6 +75,12 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if width < 10 or height < 10:
             raise RuntimeError('Invalid video dimensions')
+        if count > 0 and settings.start_time_s >= count / fps:
+            raise ValueError('Thời điểm bắt đầu phải nằm trước khi video kết thúc.')
+        count = max(0, count - round(settings.start_time_s * fps))
+        if settings.start_time_s > 0:
+            decoder = TimestampDecoder(input_file, settings.start_time_s, width, height)
+            cap.release()
         transform = None
         if corners:
             source = np.float32([[x * width, y * height] for x, y in corners])
@@ -95,7 +103,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         ball_detected = 0
         frame_idx = 0
         while True:
-            ok, frame = cap.read()
+            ok, frame = decoder.read() if decoder is not None else cap.read()
             if not ok:
                 break
             if settings.ball_tracking and ball_tracker is None:
@@ -111,7 +119,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                 if frame_idx == 0 and settings.player_seeds is not None:
                     boxes = result.boxes
                     if boxes is None or boxes.id is None:
-                        raise ValueError('Không thấy người chơi ở khung hình đầu. Chọn video có đủ người hoặc giảm độ tin cậy.')
+                        raise ValueError('Không thấy người chơi ở khung hình bắt đầu đã chọn. Chọn video có đủ người hoặc giảm độ tin cậy.')
                     id_to_slot = bind_player_seeds(boxes.xyxy.cpu().numpy(), boxes.id.int().cpu().tolist(), settings.player_seeds, width, height)
                 if result.boxes is not None and result.boxes.id is not None:
                     boxes = result.boxes.xyxy.cpu().numpy()
@@ -178,6 +186,8 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             if frame_idx % 60 == 0:
                 progress(min(94, int(94 * frame_idx / max(count, 1))), f'Processing frame {frame_idx} / {count or "?"}')
     finally:
+        if decoder is not None:
+            decoder.close()
         cap.release()
         if writer is not None:
             writer.release()
@@ -207,8 +217,9 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     if ball_tracker:
         warnings.append('Experimental color tracking, not a trained pickleball detector. Similar colors, blur and occlusion may cause missing or incorrect observations; no trajectory is inferred through gaps.')
         if not ball_detected:
-            warnings.append('No ball observations. Choose the visible ball center and radius on the first frame, or disable ball tracking.')
+            warnings.append('No ball observations. Choose the visible ball center and radius on the selected starting frame, or disable ball tracking.')
     (out / 'summary.json').write_text(json.dumps({
+        'start_time_s': settings.start_time_s, 'timeline': 'output_relative',
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
