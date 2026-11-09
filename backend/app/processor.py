@@ -9,6 +9,7 @@ import numpy as np
 from ultralytics import YOLO
 from .ball import ColorBallTracker
 from .options import AnalysisOptions
+from .labels import draw_labels
 
 # Canonical pickleball court (20 ft wide x 44 ft long), oriented vertically.
 W, H = 400, 880
@@ -108,7 +109,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                                 continue
                             id_to_slot[track_id] = len(id_to_slot) + 1
                         slot = id_to_slot[track_id]
-                        observations.append({'player': f'P{slot}', 'track_id': track_id, 'court_xy': point, 'box': [round(float(v), 1) for v in box]})
+                        observations.append({'player': f'P{slot}', 'name': settings.player_names[slot-1], 'track_id': track_id, 'court_xy': point, 'box': [round(float(v), 1) for v in box]})
                         history = image_trails[slot]
                         if history and frame_idx - history[-1][0] > settings.inference_stride:
                             history.clear()
@@ -121,6 +122,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                 if settings.heatmap_overlay:
                     mini_heat = heatmap_image(heat, base_court)
             # Preserve the last detections on skipped frames instead of flashing boxes.
+            name_labels = []
             for obs in observations:
                 slot = int(obs['player'][1:])
                 color = COLORS[slot-1][::-1]
@@ -130,7 +132,8 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                     if len(history) >= 2:
                         cv2.polylines(frame, [np.int32(history)], False, color, 2, cv2.LINE_AA)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, obs['player'], (x1, max(20, y1-8)), cv2.FONT_HERSHEY_SIMPLEX, .65, color, 2)
+                name_labels.append((x1, max(2, y1-28), f"{obs['player']} · {obs['name']}" if obs['name'] != obs['player'] else obs['player'], COLORS[slot-1]))
+            frame = draw_labels(frame, name_labels)
             if ball_tracker:
                 ball_tracker.draw(frame, ball_point)
             if settings.heatmap_overlay:
@@ -161,11 +164,14 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     except (FileNotFoundError, subprocess.SubprocessError):
         tmp.rename(final)
     court = base_court.copy()
+    court_labels = []
     for slot, points in trails.items():
         if points:
             point = tuple(map(int, points[-1]))
             cv2.circle(court, point, 11, COLORS[slot-1][::-1], -1)
-            cv2.putText(court, f'P{slot}', (point[0]+13, point[1]), cv2.FONT_HERSHEY_SIMPLEX, .65, (255, 255, 255), 2)
+            name = settings.player_names[slot-1]
+            court_labels.append((point[0]+13, point[1], f'P{slot} · {name}' if name != f'P{slot}' else name, COLORS[slot-1]))
+    court = draw_labels(court, court_labels)
     cv2.imwrite(str(out / 'court.png'), court)
     cv2.imwrite(str(out / 'heatmap.png'), heatmap_image(heat, base_court))
     (out / 'positions.json').write_text(json.dumps(per_frame))
@@ -178,6 +184,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     (out / 'summary.json').write_text(json.dumps({
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
+        'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
         'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None},
         'warnings': warnings,
         'note': 'Heatmap counts accumulated player detections, not ball movement. Court coordinates assume a planar court. Player IDs may switch on occlusion.',

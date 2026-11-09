@@ -155,3 +155,18 @@ projected onto the court because an airborne ball violates the planar assumption
 
 Brand asset: `frontend/public/brand/kun-logo.png` (transparent PNG), used in the
 header, footer and favicon. The homepage demo is explicitly simulated data.
+
+## Athlete names
+
+Enter names for P1–P4, or P1–P2 in singles mode. Names are optional, trimmed,
+limited to 40 characters, and support Vietnamese Unicode; blank entries keep the
+P-number. The multipart `options.player_names` array must contain exactly
+`player_count` entries when supplied. Names appear in the video, court PNG,
+per-frame player observations (`name`) and summary roster (`players`).
+
+Slots follow the first tracker IDs detected, not athlete identity or team membership.
+Review labels before relying on the name association; automatic identity assignment,
+manual player-to-detection mapping and recovery from ID switches are not implemented.
+Unicode overlays use DejaVu Sans (`fonts-dejavu-core` in the Docker image). Native
+installs require `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`, or set `LABEL_FONT`
+to an existing Unicode TrueType font path.

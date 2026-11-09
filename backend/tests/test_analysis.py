@@ -112,11 +112,25 @@ def test_processor_exports_numpy_detections_and_all_frames(tmp_path, monkeypatch
     monkeypatch.setattr(processor, 'YOLO', lambda *args: fake_model)
     output = tmp_path / 'output'
     output.mkdir()
-    processor.process_video(source, output, [[0,0],[1,0],[1,1],[0,1]], lambda *args: None, {'heatmap_overlay': True})
+    processor.process_video(source, output, [[0,0],[1,0],[1,1],[0,1]], lambda *args: None, {'heatmap_overlay': True, 'player_names': ['Nguyễn Ánh', 'Trần Bình', 'Lê Cường', 'Đỗ Dũng']})
     positions = json.loads((output / 'positions.json').read_text())
     assert len(positions) == 4
     assert positions[0]['players'][0]['box'] == [10.5, 15.2, 40.8, 90.5]
+    assert positions[0]['players'][0]['name'] == 'Nguyễn Ánh'
+    assert json.loads((output / 'summary.json').read_text())['players'][0] == {'player': 'P1', 'name': 'Nguyễn Ánh'}
     assert positions[1]['inferred'] is False
     assert positions[1]['players']
     assert json.loads((output / 'summary.json').read_text())['tracked_players'] == 1
     assert (output / 'annotated.mp4').stat().st_size > 0
+
+
+def test_athlete_names_trim_normalize_and_fallback():
+    settings = AnalysisOptions(player_count=2, player_names=['  Nguyễn Ánh  ', ' '])
+    assert settings.player_names == ['Nguyễn Ánh', 'P2']
+    assert AnalysisOptions(player_count=4).player_names == ['P1', 'P2', 'P3', 'P4']
+
+
+@pytest.mark.parametrize('names', [['A'], ['A', 'B', 'C'], ['A' * 41, 'B'], ['A\nB', 'C']])
+def test_invalid_athlete_names(names):
+    with pytest.raises(ValidationError):
+        AnalysisOptions(player_count=2, player_names=names)

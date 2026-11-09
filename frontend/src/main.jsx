@@ -427,6 +427,7 @@ function App() {
     ball_radius: 6,
     ball_tolerance: 15,
   });
+  const [playerNames, setPlayerNames] = useState(["", "", "", ""]);
   const [summary, setSummary] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [frameReady, setFrameReady] = useState(false);
@@ -565,6 +566,7 @@ function App() {
       "options",
       JSON.stringify({
         ...options,
+        player_names: playerNames.slice(0, options.player_count),
         ball_seed: options.ball_tracking ? ballSeed : null,
       }),
     );
@@ -578,7 +580,12 @@ function App() {
         state: "queued",
         progress: 0,
         calibrated: corners.length === 4,
-        options: { ...options },
+        options: {
+          ...options,
+          player_names: playerNames
+            .slice(0, options.player_count)
+            .map((name, i) => name.trim() || `P${i + 1}`),
+        },
       });
     } catch (e) {
       setError(e.message);
@@ -989,6 +996,50 @@ function App() {
                     </small>
                   </label>
                 </div>
+                <div className="athlete-roster">
+                  <div className="roster-heading">
+                    <h4>Tên vận động viên</h4>
+                    <span className="outline-tag">
+                      {options.player_count} NGƯỜI CHƠI
+                    </span>
+                  </div>
+                  <div className="athlete-inputs">
+                    {playerNames
+                      .slice(0, options.player_count)
+                      .map((name, i) => (
+                        <label key={i}>
+                          <span
+                            className="player-chip"
+                            style={{ color: players[i] }}
+                          >
+                            P{i + 1}
+                          </span>
+                          <span className="sr-only">
+                            Tên vận động viên P{i + 1}
+                          </span>
+                          <input
+                            type="text"
+                            aria-label={`Tên vận động viên P${i + 1}`}
+                            maxLength={40}
+                            value={name}
+                            placeholder={`Nhập tên vận động viên ${i + 1}`}
+                            onChange={(e) =>
+                              setPlayerNames((current) =>
+                                current.map((value, index) =>
+                                  index === i ? e.target.value : value,
+                                ),
+                              )
+                            }
+                          />
+                        </label>
+                      ))}
+                  </div>
+                  <p>
+                    Tên gắn với nhãn P1–P{options.player_count} theo thứ tự AI
+                    phát hiện, không phải nhận diện danh tính. Hãy kiểm tra nhãn
+                    trong video. Để trống sẽ dùng P1–P{options.player_count}.
+                  </p>
+                </div>
                 <div className="output-options">
                   <label>
                     <input
@@ -1305,6 +1356,19 @@ function App() {
                       </span>
                     </div>
                     <video controls src={fileUrl(job.id, "annotated.mp4")} />
+                    {job.options?.player_names && (
+                      <div
+                        className="athlete-legend"
+                        aria-label="Tên vận động viên trong kết quả"
+                      >
+                        {job.options.player_names.map((name, i) => (
+                          <span key={i}>
+                            <b style={{ color: players[i] }}>P{i + 1}</b>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="output-manifest">
                       <span>
                         <Check size={13} /> Nhãn người chơi
