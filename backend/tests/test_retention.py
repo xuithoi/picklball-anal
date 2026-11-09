@@ -1,7 +1,5 @@
 import asyncio
 import json
-import os
-import tempfile
 import time
 import uuid
 
@@ -9,7 +7,6 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-os.environ.setdefault('DATA_DIR', tempfile.mkdtemp(prefix='pickleball-tests-'))
 from app import main
 
 
