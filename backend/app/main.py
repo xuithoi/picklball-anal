@@ -11,6 +11,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from .access import AccessGate
 
 from .processor import process_video
 from .options import AnalysisOptions
@@ -78,6 +80,8 @@ def cleanup_loop():
 
 @asynccontextmanager
 async def lifespan(app):
+    if os.getenv('REQUIRE_AUTH') == '1' and not os.getenv('APP_PASSWORD'):
+        raise RuntimeError('APP_PASSWORD is required for this deployment')
     cleanup_once()
     thread = threading.Thread(target=cleanup_loop, daemon=True)
     thread.start()
@@ -88,6 +92,7 @@ async def lifespan(app):
 
 app = FastAPI(title='Pickleball Kun AI', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:8080').split(','), allow_credentials=False, allow_methods=['GET', 'POST', 'DELETE'], allow_headers=['*'])
+app.add_middleware(AccessGate)
 locks = {}
 
 
@@ -231,3 +236,9 @@ def delete_job(job_id: str):
 def confirm_download(job_id: str):
     # Called only after explicit user confirmation, not when download starts.
     return delete_job(job_id)
+
+
+# Register static assets after API routes so both share one HTTPS origin.
+frontend_dist = os.getenv('FRONTEND_DIST')
+if frontend_dist:
+    app.mount('/', StaticFiles(directory=frontend_dist, html=True), name='frontend')

@@ -2,6 +2,8 @@
 
 A runnable proof-of-concept for **offline processing of uploaded MP4 video**. Includes optional experimental ball color tracking initialized by selecting the ball on the first frame. No live camera, speed measurement or automatic scoring.
 
+Deployment on Botkeep or Render: see [DEPLOY.md](DEPLOY.md) for the combined Docker image, resources, access password and persistent storage.
+
 ## Quick start (Docker recommended)
 
 Requirements: Docker Engine / Docker Desktop with Compose, internet **for first build and first YOLO model download**.
