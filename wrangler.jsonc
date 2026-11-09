@@ -25,5 +25,8 @@
       "BACKEND_ORIGIN": "https://pickleballmvp.run.place",
       "BACKEND_USERNAME": "kun"
     }
+  },
+  "build": {
+    "command": "npm --prefix frontend ci && npm --prefix frontend run build"
   }
 }

@@ -85,7 +85,7 @@ proxy is only for local development. A Worker alone does not provision that back
 
 Cloudflare build settings (repository root `/`):
 
-- Build command: `npm --prefix frontend ci && npm --prefix frontend run build`
+- Build command: leave empty; Wrangler runs the checked-in `build.command`.
 - Deploy command: `npx wrangler@4.158.0 deploy`
 
 For branch builds, use `npx wrangler@4.158.0 preview` as the non-production

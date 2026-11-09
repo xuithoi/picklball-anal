@@ -128,12 +128,16 @@ Cloudflare cookies and identity tokens before forwarding requests to EC2.
 Cloudflare Git build settings:
 
 - Production branch: `main`, repository root: `/`.
-- Build: `npm --prefix frontend ci && npm --prefix frontend run build`
+- Build: leave empty; Wrangler runs the checked-in `build.command`.
 - Deploy: `npx wrangler@4.158.0 deploy`
 
 For non-production branches such as `fix/cloudflare-aws-deployment`, set the
 **non-production/Preview deploy command** to `npx wrangler@4.158.0 preview`.
 The production command remains `npx wrangler@4.158.0 deploy` on `main`.
+Both commands run the repository-owned frontend build hook before uploading,
+so a fresh clone does not need a pre-existing `frontend/dist` directory. Keeping
+the dashboard Build command empty avoids building the frontend twice.
+
 The explicit `previews.vars` block is needed because Worker Preview variables
 are not inherited from production. Assets and compatibility settings stay at
 the top level; they are shared by both deployment modes.
