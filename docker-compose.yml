@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      YOLO_MODEL: yolo11n.pt
+      INFERENCE_STRIDE: '2'
+      MAX_UPLOAD_MB: '600'
+      RESULT_TTL_SECONDS: '1800'
+      CLEANUP_INTERVAL_SECONDS: '30'
+    volumes:
+      - pickleball_data:/data
+      - model_cache:/root/.config/Ultralytics
+    # For NVIDIA GPU deployments, install NVIDIA Container Toolkit and configure GPU access.
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - backend
+volumes:
+  pickleball_data:
+  model_cache:
