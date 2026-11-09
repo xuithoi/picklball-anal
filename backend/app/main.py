@@ -151,9 +151,9 @@ async def create_job(video: UploadFile = File(...), corners: str = Form(''), opt
     except ValidationError as exc:
         await video.close()
         raise HTTPException(422, '; '.join(error['msg'] for error in exc.errors()))
-    if settings.heatmap_overlay and parsed is None:
+    if (settings.heatmap_overlay or settings.minimap_overlay or settings.court_lines) and parsed is None:
         await video.close()
-        raise HTTPException(422, 'Chọn đủ 4 góc sân để chèn heatmap vào video.')
+        raise HTTPException(422, 'Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.')
     if parsed is not None:
         import cv2
         import numpy as np
