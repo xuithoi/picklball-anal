@@ -19,5 +19,11 @@
   "vars": {
     "BACKEND_ORIGIN": "https://pickleballmvp.run.place",
     "BACKEND_USERNAME": "kun"
+  },
+  "previews": {
+    "vars": {
+      "BACKEND_ORIGIN": "https://pickleballmvp.run.place",
+      "BACKEND_USERNAME": "kun"
+    }
   }
 }

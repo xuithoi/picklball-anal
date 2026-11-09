@@ -88,6 +88,11 @@ Cloudflare build settings (repository root `/`):
 - Build command: `npm --prefix frontend ci && npm --prefix frontend run build`
 - Deploy command: `npx wrangler@4.158.0 deploy`
 
+For branch builds, use `npx wrangler@4.158.0 preview` as the non-production
+deploy command. The explicit `previews` configuration supplies Preview variables;
+Preview secrets and Access protection must be configured separately (see the
+[AWS guide](deploy/aws/README.md#4-configure-and-deploy-the-cloudflare-worker)).
+
 The checked-in Wrangler configuration supplies the Worker entrypoint, assets and
 compatibility date. In the Worker's **Settings → Variables and Secrets**, add:
 
@@ -111,7 +116,7 @@ rather than serving the frontend HTML for API calls. Upload size is also limited
 by the Cloudflare plan and backend settings; a 600 MB client ceiling does not
 raise either limit. Services handling model inference must use one Uvicorn worker.
 
-Run proxy regression checks with `node --test worker/index.test.mjs`.
+Run proxy regression checks with `node --test worker/*.test.mjs`.
 No cloud backend is created or paid plan activated by adding this configuration.
 
 ## AWS EC2

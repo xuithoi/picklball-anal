@@ -131,6 +131,23 @@ Cloudflare Git build settings:
 - Build: `npm --prefix frontend ci && npm --prefix frontend run build`
 - Deploy: `npx wrangler@4.158.0 deploy`
 
+For non-production branches such as `fix/cloudflare-aws-deployment`, set the
+**non-production/Preview deploy command** to `npx wrangler@4.158.0 preview`.
+The production command remains `npx wrangler@4.158.0 deploy` on `main`.
+The explicit `previews.vars` block is needed because Worker Preview variables
+are not inherited from production. Assets and compatibility settings stay at
+the top level; they are shared by both deployment modes.
+
+The Preview currently points at the same EC2 backend as production. Production
+secrets are not automatically inherited: add `BACKEND_PASSWORD` to the Preview's
+secrets or Preview base config in Cloudflare, with the same backend password.
+Only do this after protecting the Preview URL with Cloudflare Access as well;
+the production Access policy may not cover Preview hostnames. Without the
+Preview secret, the frontend can load and public health can work, but job APIs
+return 401. Test uploads/deletion affect the shared backend's actual data.
+Use a separate backend origin and credentials in `previews.vars`/Preview secrets
+when you need isolated test data. No credential value belongs in this file.
+
 After merging this PR, configure the secret and rerun the Git deployment if needed.
 This replaces the old `--assets`-only deployment command. There is no automatic
 AWS update from Cloudflare's build: EC2 must run the updated backend separately.
@@ -147,7 +164,7 @@ authentication: confirm an actual upload after each deployment.
 Local checks:
 
 ```sh
-node --test worker/index.test.mjs frontend/src/api.test.js
+node --test worker/*.test.mjs frontend/src/api.test.js
 python3 -m unittest discover -s deploy/aws/tests -v
 APP_PASSWORD=validation-only BACKEND_DOMAIN=pickleballmvp.run.place docker compose -f deploy/aws/compose.yaml config --quiet
 ```
