@@ -426,8 +426,10 @@ function App() {
     confidence: 0.3,
     inference_stride: 2,
     player_marker: "ellipse",
+    player_ring_animation: true,
     player_trails: true,
     minimap_overlay: false,
+    minimap_ball_projection: false,
     court_lines: false,
     heatmap_overlay: false,
     ball_tracking: false,
@@ -439,8 +441,11 @@ function App() {
   const [metadata, setMetadata] = useState(null);
   const [frameReady, setFrameReady] = useState(false);
   const [startTime, setStartTime] = useState(0);
-  const setOption = (name, value) =>
-    setOptions((o) => ({ ...o, [name]: value }));
+  const setOption = (name, value) => setOptions((current) => {
+    const next = { ...current, [name]: value };
+    if (!next.minimap_overlay || !next.ball_tracking) next.minimap_ball_projection = false;
+    return next;
+  });
   const [uploading, setUploading] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -1035,6 +1040,12 @@ function App() {
                       <small>Giữ màu P1–P{options.player_count} và tên đã nhập. Bỏ chọn để dùng khung chữ nhật.</small>
                     </span>
                   </label>
+                  <label>
+                    <input type="checkbox" checked={options.player_ring_animation}
+                      disabled={options.player_marker !== "ellipse"}
+                      onChange={(e) => setOption("player_ring_animation", e.target.checked)} />
+                    <span><strong>Vòng chân chuyển động</strong><small>Vòng sáng xoay và nhịp nhẹ theo thời gian video.</small></span>
+                  </label>
                   {[
                     ["minimap_overlay", "Minimap trong video", "Cần 4 góc sân. Cập nhật vị trí chân người chơi ở góc trái video."],
                     ["court_lines", "Vạch sân trên video", "Cần 4 góc sân. Vẽ đường biên, vạch bếp và đường giữa theo phối cảnh."],
@@ -1098,6 +1109,13 @@ function App() {
                     </span>
                   </label>
                 </div>
+                <label className="map-ball-option">
+                  <input type="checkbox" checked={options.minimap_ball_projection}
+                    disabled={!options.minimap_overlay || !options.ball_tracking}
+                    onChange={(e) => setOption("minimap_ball_projection", e.target.checked)} />
+                  <span><strong>Bóng trên minimap (chiếu 2D)</strong>
+                    <small>Bật minimap và đường bóng để dùng. Đây là phép chiếu gần đúng từ ảnh, không phải vị trí bóng chạm sân.</small></span>
+                </label>
                 {options.ball_tracking && (
                   <div className="ball-settings">
                     <label>
@@ -1417,6 +1435,12 @@ function App() {
                           <Check size={13} /> Vệt di chuyển
                         </span>
                       )}
+                      {job.options?.player_marker === "ellipse" && job.options?.player_ring_animation && (
+                        <span><Check size={13} /> Vòng chân chuyển động</span>
+                      )}
+                      {job.options?.minimap_ball_projection && (
+                        <span><ScanLine size={13} /> Bóng trên minimap · 2D</span>
+                      )}
                       {job.options?.minimap_overlay && (
                         <span><Check size={13} /> Minimap trong video</span>
                       )}
@@ -1441,6 +1465,9 @@ function App() {
                           {summary.frames} khung hình
                         </strong>
                         <p>Bắt đầu từ {frameTime(summary.start_time_s || 0)} của video gốc. Các mốc trong kết quả tính từ 00:00 của đoạn đã chọn.</p>
+                        {summary.options?.minimap_ball_projection && (
+                          <p>Vị trí bóng trên minimap là phép chiếu 2D gần đúng từ ảnh, không biểu thị độ cao hay điểm chạm sân.</p>
+                        )}
                         {summary.ball_tracking?.enabled && (
                           <p>
                             Bóng được quan sát:{" "}

@@ -14,8 +14,10 @@ class AnalysisOptions(BaseModel):
     confidence: float = Field(default=0.3, ge=0.1, le=0.9)
     inference_stride: int = Field(default=2, ge=1, le=4)
     player_marker: Literal['ellipse', 'box'] = 'ellipse'
+    player_ring_animation: bool = True
     player_trails: bool = True
     minimap_overlay: bool = False
+    minimap_ball_projection: bool = False
     court_lines: bool = False
     heatmap_overlay: bool = False
     ball_tracking: bool = False
@@ -60,6 +62,8 @@ class AnalysisOptions(BaseModel):
         if self.player_names is not None and len(self.player_names) != self.player_count:
             raise ValueError('Số tên phải khớp số người chơi (2 hoặc 4).')
         self.player_names = [name or f'P{i+1}' for i, name in enumerate(self.player_names or [''] * self.player_count)]
+        if self.minimap_ball_projection and not (self.minimap_overlay and self.ball_tracking):
+            raise ValueError('Bật minimap và theo dõi bóng để hiển thị bóng chiếu 2D trên minimap.')
         if self.ball_tracking and self.ball_seed is None:
             raise ValueError('Hãy chọn tâm bóng trên khung hình bắt đầu đã chọn.')
         return self
