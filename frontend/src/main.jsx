@@ -47,6 +47,9 @@ function CourtScene({ time = 24, layer = "tracking", compact = false }) {
     x + Math.sin(time / 8 + i * 2) * 0.045,
     y + Math.cos(time / 11 + i) * 0.04,
   ]);
+  const ballAt = (t) => project(.5 + Math.sin(t * 2) * .24, .5 + Math.cos(t * 2) * .3);
+  const ballPath = Array.from({ length: 24 }, (_, i) => ballAt(time - .7 + i * .7 / 23));
+  const ballHead = ballAt(time);
   return (
     <svg
       className={`court-scene ${compact ? "compact" : ""}`}
@@ -198,19 +201,14 @@ function CourtScene({ time = 24, layer = "tracking", compact = false }) {
                 transform={`rotate(-35 ${x + 24} ${y - 20})`}
               />
             </g>
-            {layer === "tracking" && (
+            {layer !== "court" && (
               <>
-                <rect
-                  x={x - 27}
-                  y={y - 63}
-                  width="55"
-                  height="72"
-                  rx="2"
-                  fill={color}
-                  fillOpacity=".04"
-                  stroke={color}
-                  strokeWidth="1.3"
-                />
+                <ellipse cx={x} cy={y + 4} rx="29" ry="10" fill="none" stroke={color} strokeWidth="6" opacity=".4" filter={`url(#${uid}-glow)`} />
+                <ellipse cx={x} cy={y + 4} rx={27 + Math.sin(time * 5 + i) * 1.2} ry="8" fill="none" stroke={color} strokeWidth="2.5" />
+                <ellipse cx={x} cy={y + 4} rx="22" ry="5" fill="none" stroke={color} strokeWidth="1.3" />
+                <g transform={`translate(${x} ${y + 4}) scale(1 .32)`}>
+                  <circle r="33" fill="none" stroke={color} strokeWidth="4" strokeDasharray="35 173" transform={`rotate(${time * 120 + i * 67})`} />
+                </g>
                 <rect
                   x={x - 27}
                   y={y - 81}
@@ -252,30 +250,22 @@ function CourtScene({ time = 24, layer = "tracking", compact = false }) {
       })}
       {layer === "ball" && (
         <g>
-          <path
-            d="M 300 405 Q 390 160 520 190 T 590 340"
-            fill="none"
-            stroke="#fff04e"
-            strokeWidth="3"
-            strokeDasharray="6 4"
-          />
-          <circle
-            cx={440 + Math.sin(time / 5) * 100}
-            cy={230 + Math.cos(time / 5) * 70}
-            r="7"
-            fill="#e9ff66"
-          />
-          <text
-            x="280"
-            y="530"
-            fontFamily="monospace"
-            fontSize="11"
-            fill="#fff04e"
-          >
-            BALL TRAJECTORY / SIMULATED
-          </text>
+          <polyline points={ballPath.map(p => p.join(",")).join(" ")} fill="none" stroke="#eb5aeb" strokeWidth="8" opacity=".3" filter={`url(#${uid}-glow)`} />
+          {ballPath.slice(1).map((point, i) => <line key={i} x1={ballPath[i][0]} y1={ballPath[i][1]} x2={point[0]} y2={point[1]} stroke="#eb5aeb" strokeWidth="3" opacity={.2 + .8 * i / 22} />)}
+          <circle cx={ballHead[0]} cy={ballHead[1]} r={8 + Math.sin(time * 8)} fill="none" stroke="#eb5aeb" strokeWidth="2" />
+          <circle cx={ballHead[0]} cy={ballHead[1]} r="3" fill="#fff0ff" />
+          <text x="280" y="530" fontFamily="monospace" fontSize="11" fill="#eb5aeb">BALL / SIMULATED · 2D APPROXIMATION</text>
         </g>
       )}
+      <g transform="translate(12 310)" aria-label="Minimap mô phỏng">
+        <rect width="126" height="230" rx="5" fill="#0d1710" fillOpacity=".8" stroke="#52674e" />
+        <text x="10" y="18" fill="#b7c7ad" fontSize="9" fontFamily="monospace">MINIMAP / DEMO</text>
+        <rect x="23" y="32" width="80" height="176" fill="none" stroke="#91a586" />
+        {[.34,.5,.66].map(v => <line key={v} x1="23" x2="103" y1={32+v*176} y2={32+v*176} stroke="#91a586" />)}
+        <path d="M63 32V92M63 148V208" fill="none" stroke="#91a586" />
+        {positions.map(([u,v],i) => <g key={i}><circle cx={23+u*80} cy={32+v*176} r={5+Math.sin(time*5+i)} fill="none" stroke={players[i]} opacity=".5" /><circle cx={23+u*80} cy={32+v*176} r="3" fill={players[i]} /></g>)}
+        {layer === "ball" && <circle cx={63+Math.sin(time*2)*.24*80} cy={120+Math.cos(time*2)*.3*176} r="3" fill="#eb5aeb" />}
+      </g>
       <path
         d="M 170 298 L 712 298 L 712 281 L 170 281 Z"
         fill="#adbea2"
@@ -318,8 +308,18 @@ function DemoPanel({ hero = false }) {
   const [layer, setLayer] = useState("tracking");
   useEffect(() => {
     if (!playing) return;
-    const timer = setInterval(() => setTime((t) => (t + 0.2) % 90), 200);
-    return () => clearInterval(timer);
+    let handle;
+    let previous = performance.now();
+    const tick = (now) => {
+      const delta = now - previous;
+      if (delta >= 1000 / 30) {
+        setTime(t => (t + Math.min(delta / 1000, .1)) % 90);
+        previous = now;
+      }
+      handle = requestAnimationFrame(tick);
+    };
+    handle = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(handle);
   }, [playing]);
   return (
     <div className={`demo-panel ${hero ? "hero-demo" : ""}`}>
@@ -452,10 +452,25 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const canvas = useRef(null);
+  const statusTarget = useRef(null);
+  const resultTarget = useRef(null);
+  const errorTarget = useRef(null);
   const needsCourt = options.heatmap_overlay || options.minimap_overlay || options.court_lines;
   const busy =
     uploading ||
     (job && !["complete", "failed", "expired"].includes(job.state));
+  useEffect(() => {
+    const target = job?.state === "complete" ? resultTarget.current
+      : (uploading || job?.id) ? statusTarget.current : null;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }, [uploading, job?.id, job?.state]);
+  useEffect(() => {
+    if (!error || !errorTarget.current) return;
+    errorTarget.current.focus({ preventScroll: true });
+    errorTarget.current.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  }, [error]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -539,6 +554,16 @@ function App() {
     setOption("minimap_overlay", false);
     setOption("court_lines", false);
     setFile(selected);
+  }
+  function editInputs() {
+    setJob(null);
+    setSummary(null);
+    setError("");
+    requestAnimationFrame(() => {
+      const target = document.getElementById("input-points");
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    });
   }
   async function analyze() {
     if (!file || busy) return;
@@ -696,7 +721,7 @@ function App() {
               </span>
             </div>
           </div>
-          <div className="hero-visual">
+          <div className="hero-visual" id="demo">
             <div className="visual-coordinate">
               VISION SYSTEM / MVP_01 <span>● OFFLINE ANALYSIS</span>
             </div>
@@ -733,78 +758,9 @@ function App() {
             </span>
           </div>
         </div>
-        <section className="section-width demo-section" id="demo">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">
-                <span className="section-number">01 /</span> EXPLORE THE VISION
-              </span>
-              <h2>
-                Đổi góc nhìn.
-                <br />
-                <span>Hiểu từng bước chân.</span>
-              </h2>
-            </div>
-            <p>
-              Chuyển giữa các lớp dữ liệu để khám phá kết quả.
-              <br />
-              Demo minh họa — không phải phân tích một trận đấu thật.
-            </p>
-          </div>
-          <div className="demo-grid">
-            <DemoPanel />
-            <div className="demo-insights">
-              <div className="insight-intro">
-                <span className="outline-tag">YOUR POST-MATCH TOOLKIT</span>
-                <h3>
-                  Cả trận đấu.
-                  <br /> Trong tầm mắt.
-                </h3>
-              </div>
-              {[
-                [
-                  ScanLine,
-                  "01",
-                  "Nhận diện & theo dõi",
-                  "Theo dõi 2 hoặc 4 người chơi, gắn nhãn P1–P4 trên video.",
-                ],
-                [
-                  Layers,
-                  "02",
-                  "Nhìn thấy chuyển động",
-                  "Hiệu chỉnh 4 góc sân để xem vị trí và heatmap di chuyển tổng hợp.",
-                ],
-                [
-                  Download,
-                  "03",
-                  "Mang dữ liệu ra khỏi sân",
-                  "Tải video có chú thích và dữ liệu vị trí JSON để xem lại.",
-                ],
-              ].map(([Icon, n, title, desc]) => (
-                <div className="insight" key={n}>
-                  <div className="insight-icon">
-                    <Icon size={19} />
-                  </div>
-                  <div>
-                    <small>/{n}</small>
-                    <h4>{title}</h4>
-                    <p>{desc}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="scope-note">
-                <CircleHelp size={15} />
-                <span>
-                  MVP phân tích video ngoại tuyến. Bám bóng theo màu ở chế độ
-                  thử nghiệm. Chưa đo tốc độ hoặc tự chấm điểm.
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
         <section className="workflow section-width" id="how-it-works">
           <div className="workflow-label">
-            <span className="eyebrow">02 / SIMPLE BY DESIGN</span>
+            <span className="eyebrow">01 / SIMPLE BY DESIGN</span>
             <h2>Từ video đến góc nhìn mới.</h2>
           </div>
           <div className="steps">
@@ -838,7 +794,7 @@ function App() {
             <div className="section-heading">
               <div>
                 <span className="eyebrow">
-                  <span className="section-number">03 /</span> YOUR TURN
+                  <span className="section-number">02 /</span> YOUR TURN
                 </span>
                 <h2>
                   Đến lượt <span>bạn.</span>
@@ -847,7 +803,7 @@ function App() {
               <p>
                 Một video. Một góc nhìn khác.
                 <br />
-                Tải trận đấu lên và để AI bắt đầu công việc.
+                Chọn khung hình, đánh dấu đầu vào rồi bắt đầu phân tích.
               </p>
             </div>
             <div className="workspace">
@@ -898,28 +854,16 @@ function App() {
                   </label>
                 </div>
                 <div className="upload-settings">
-                  <span className="eyebrow">READY WHEN YOU ARE</span>
+                  <span className="eyebrow">BƯỚC 1 · TẢI VIDEO</span>
                   <h3>
                     Mang trận đấu
                     <br />
                     vào phòng phân tích.
                   </h3>
                   <p>
-                    Dùng góc quay cố định, thấy rõ cả sân và bốn người chơi.
+                    Dùng góc quay cố định, thấy rõ sân và người chơi.
                     Video ngắn giúp bạn thử nhanh hơn.
                   </p>
-                  <button
-                    className="primary"
-                    disabled={!file || Boolean(busy)}
-                    onClick={analyze}
-                  >
-                    {uploading
-                      ? "Đang tải video…"
-                      : busy
-                        ? "Đang phân tích…"
-                        : "Phân tích video"}
-                    <ArrowUpRight size={18} />
-                  </button>
                   <small>
                     <ShieldCheck size={13} /> Tự xóa 30 phút sau khi xử lý xong
                   </small>
@@ -928,6 +872,7 @@ function App() {
               {file && (
                 <details className="input-video" open>
                   <summary><Play size={14} /> Chọn khung hình bắt đầu phân tích</summary>
+                  <p>Tua tới lúc thấy rõ bóng và người chơi, rồi bấm <strong>Dùng khung hình này</strong>. Ảnh đánh dấu bên dưới sẽ dùng đúng khung đã xác nhận.</p>
                   <VideoFramePicker src={preview} selectedTime={startTime}
                     disabled={Boolean(busy || job)} onConfirm={confirmFrame} onError={setError} />
                 </details>
@@ -1161,7 +1106,7 @@ function App() {
                 )}
               </fieldset>
               {file && (
-                <div className="calibration" style={{ display: job ? "none" : undefined }}>
+                <div className="calibration" id="input-points" tabIndex={-1} style={{ display: job ? "none" : undefined }}>
                   <div className="calibration-heading">
                     <div>
                       <h3>
@@ -1307,60 +1252,73 @@ function App() {
                   </div>
                 </div>
               )}
-              {error && (
-                <div className="message error" role="alert">
-                  <CircleHelp size={17} />
-                  {error}
-                  <button
-                    className="icon-button"
-                    onClick={() => setError("")}
-                    aria-label="Đóng thông báo"
-                  >
-                    <X size={16} />
+              {file && (!job || deleted || expired) && (
+                <div className="analysis-submit">
+                  <div>
+                    <strong>Sẵn sàng phân tích?</strong>
+                    <p>Khung {frameTime(startTime)} · {corners.length}/4 góc sân · {playerSeeds.slice(0, options.player_count).filter(Boolean).length}/{options.player_count} vị trí người chơi{options.ball_tracking ? ` · Bóng: ${ballSeed ? "đã chọn" : "chưa chọn"}` : ""}</p>
+                    <small>Góc sân cần khi bật minimap, vạch sân hoặc heatmap. Gán vị trí người chơi khi nhập tên.</small>
+                  </div>
+                  <button className="primary" disabled={!frameReady || Boolean(busy)} onClick={analyze}>
+                    {uploading ? "Đang tải video…" : "Phân tích video"}<ArrowUpRight size={18} />
                   </button>
                 </div>
               )}
-              {job && !deleted && !expired && (
-                <div
-                  className={`job-status ${job.state === "failed" ? "failed" : ""}`}
-                  role="status"
-                >
-                  <div>
-                    <span className="eyebrow">
-                      {job.state === "failed"
-                        ? "ANALYSIS FAILED"
-                        : complete
-                          ? "ANALYSIS COMPLETE"
-                          : "PROCESSING YOUR GAME"}
-                    </span>
-                    <h3>
-                      {job.state === "failed"
-                        ? "Chưa thể xử lý video"
-                        : complete
-                          ? "Góc nhìn mới đã sẵn sàng."
-                          : "Đang đọc từng khung hình…"}
-                    </h3>
-                    <p>
-                      {job.message ||
-                        "Video đang chờ xử lý. Bạn có thể giữ trang này mở để xem kết quả."}
-                    </p>
-                    {job.state === "failed" && (
-                      <button type="button" className="secondary" onClick={() => {
-                        setJob(null); setSummary(null); setError("");
-                      }}>Chỉnh lại đầu vào</button>
-                    )}
+              <div ref={statusTarget} tabIndex={-1} className="analysis-feedback" aria-label="Tiến trình phân tích">
+                {uploading && <div className="job-status" role="status"><div><h3>Đang tải video…</h3><p>Giữ trang này mở. Tiến trình và kết quả sẽ xuất hiện tại đây.</p></div></div>}
+                {error && (
+                  <div className="message error" role="alert" ref={errorTarget} tabIndex={-1}>
+                    <CircleHelp size={17} />
+                    {error}
+                    <button
+                      className="icon-button"
+                      onClick={() => setError("")}
+                      aria-label="Đóng thông báo"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
-                  <div className="progress-area">
-                    <strong>
-                      {job.progress || 0}
-                      <span>%</span>
-                    </strong>
-                    <div className="progress-track">
-                      <div style={{ width: `${job.progress || 0}%` }} />
+                )}
+                {job && !deleted && !expired && (
+                  <div
+                    className={`job-status ${job.state === "failed" ? "failed" : ""}`}
+                    role="status"
+                  >
+                    <div>
+                      <span className="eyebrow">
+                        {job.state === "failed"
+                          ? "ANALYSIS FAILED"
+                          : complete
+                            ? "ANALYSIS COMPLETE"
+                            : "PROCESSING YOUR GAME"}
+                      </span>
+                      <h3>
+                        {job.state === "failed"
+                          ? "Chưa thể xử lý video"
+                          : complete
+                            ? "Góc nhìn mới đã sẵn sàng."
+                            : "Đang đọc từng khung hình…"}
+                      </h3>
+                      <p>
+                        {job.message ||
+                          "Video đang chờ xử lý. Bạn có thể giữ trang này mở để xem kết quả."}
+                      </p>
+                      {job.state === "failed" && (
+                        <button type="button" className="secondary" onClick={editInputs}>Chỉnh lại đầu vào</button>
+                      )}
+                    </div>
+                    <div className="progress-area">
+                      <strong>
+                        {job.progress || 0}
+                        <span>%</span>
+                      </strong>
+                      <div className="progress-track">
+                        <div style={{ width: `${job.progress || 0}%` }} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
               {job?.expires_at && !deleted && !expired && (
                 <div className="retention">
                   <Timer size={20} />
@@ -1402,12 +1360,13 @@ function App() {
                 </div>
               )}
               {complete && (
-                <div className="results">
+                <div className="results" ref={resultTarget} tabIndex={-1} aria-label="Kết quả phân tích">
                   <div className="result-video">
                     <div className="result-title">
                       <h3>
                         <Video size={17} /> Video phân tích
                       </h3>
+                      <button type="button" className="secondary" onClick={editInputs}><RotateCcw size={14} /> Chỉnh đầu vào</button>
                       <span className="outline-tag">
                         P1 — P{job.options?.player_count || 4}
                       </span>
