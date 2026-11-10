@@ -24,6 +24,8 @@ import "./style.css";
 import { requestJson } from "./api.js";
 import VideoFramePicker, { frameTime } from "./VideoFramePicker.jsx";
 import BallSeedEditor from "./BallSeedEditor.jsx";
+import CourtCalibrationPreview from "./CourtCalibrationPreview.jsx";
+import { cornerNames, cornerError, validCorners, orderedCourtCorners } from "./calibration.js";
 
 const API = "/api";
 const fileUrl = (id, name) => `${API}/jobs/${id}/files/${name}`;
@@ -455,6 +457,7 @@ function App() {
   const statusTarget = useRef(null);
   const resultTarget = useRef(null);
   const errorTarget = useRef(null);
+  const courtCorners = orderedCourtCorners(corners);
   const needsCourt = options.heatmap_overlay || options.minimap_overlay || options.court_lines;
   const busy =
     uploading ||
@@ -483,6 +486,7 @@ function App() {
   }, [file]);
   function confirmFrame(image, info) {
     if (!canvas.current) return;
+    if (frameReady && Math.abs(startTime - info.time) < 1e-6 && metadata?.width === info.width && metadata?.height === info.height) return;
     const target = canvas.current;
     target.width = info.width;
     target.height = info.height;
@@ -574,8 +578,9 @@ function App() {
       );
     if (corners.length > 0 && corners.length < 4)
       return setError(
-        "Hãy chọn đủ 4 góc sân hoặc bấm Chọn lại để bỏ hiệu chỉnh.",
+        "Hãy chọn đủ 4 góc sân hoặc bấm Chọn lại góc sân để bỏ hiệu chỉnh.",
       );
+    if (corners.length === 4 && !validCorners(courtCorners)) return setError(cornerError);
     if (needsCourt && corners.length !== 4)
       return setError("Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.");
     const named = playerNames.slice(0, options.player_count).some((name) => name.trim());
@@ -599,7 +604,7 @@ function App() {
         ball_seed: options.ball_tracking ? ballSeed : null,
       }),
     );
-    if (corners.length === 4) form.append("corners", JSON.stringify(corners));
+    if (corners.length === 4) form.append("corners", JSON.stringify(courtCorners));
     try {
       await requestJson(await fetch(`${API}/health`), "Không kết nối được máy chủ phân tích.", (data) => data.ok === true);
       const r = await fetch(`${API}/jobs`, { method: "POST", body: form });
@@ -1119,21 +1124,22 @@ function App() {
                       </h3>
                       <p>
                         Chọn 4 góc ngoài của sân theo thứ tự: trên trái → trên
-                        phải → dưới phải → dưới trái. Cần bước này để có minimap,
-                        vạch sân và heatmap.
+                        phải → dưới trái → dưới phải. Cần bước này để có minimap,
+                        vạch sân và heatmap. Chọn góc ngoài của toàn sân, không chọn góc lưới hoặc vùng bếp.
                       </p>
                     </div>
                     <button
                       className="secondary"
                       onClick={() => {
                         setCorners([]);
-                        setBallSeed(null);
-                        setPlayerSeeds([null, null, null, null]);
                         setSelectionMode("court");
                       }}
                     >
-                      <RotateCcw size={14} /> Chọn lại
+                      <RotateCcw size={14} /> Chọn lại góc sân
                     </button>
+                  </div>
+                  <div className="corner-guide" aria-label="Sơ đồ góc sân: phía xa 1 trái, 2 phải; phía gần 3 trái, 4 phải">
+                    <small>PHÍA XA CAMERA</small><b>1</b><b>2</b><span>LƯỚI</span><b>3</b><b>4</b><small>PHÍA GẦN CAMERA</small>
                   </div>
                   <div className="selection-toolbar">
                     <button
@@ -1186,6 +1192,9 @@ function App() {
                     Chọn nút P1–P{options.player_count}, rồi nhấn vào giữa thân người tương ứng trong ảnh. Chọn lại nút rồi nhấn vào ảnh để sửa vị trí.
                     Các số 1–4 đánh dấu góc sân, không phải vận động viên.
                   </p>
+                  {selectionMode === "court" && corners.length < 4 && <p className="selection-hint">Góc tiếp theo: <strong>{corners.length + 1} · {cornerNames[corners.length]}</strong>. Nếu không thấy đủ góc ngoài, hãy chọn khung hình khác.</p>}
+                  {corners.length === 4 && !validCorners(courtCorners) && <p className="calibration-warning" role="alert">{cornerError}</p>}
+                  {corners.length === 4 && validCorners(courtCorners) && <p className="selection-hint">Kiểm tra đường xanh “LƯỚI” trùng lưới thật và các đường biên trùng toàn sân. Nếu lệch, chọn lại góc trước khi phân tích.</p>}
                   <div
                     className="calframe"
                     onClick={(e) => {
@@ -1206,6 +1215,7 @@ function App() {
                     }}
                   >
                     <canvas ref={canvas} />
+                    <CourtCalibrationPreview corners={courtCorners} />
                     {options.ball_tracking && ballSeed && metadata && (
                       <span
                         className="ball-seed"
@@ -1227,6 +1237,8 @@ function App() {
                     {corners.map(([x, y], i) => (
                       <span
                         className="corner-dot"
+                        title={`${i + 1} · ${cornerNames[i]}`}
+                        aria-label={`Góc ${i + 1}: ${cornerNames[i]}`}
                         key={i}
                         style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
                       >

@@ -160,7 +160,7 @@ export default function VideoFramePicker({ src, selectedTime, disabled, onConfir
         </button>
       </div>
       <p role="status">Đã chọn bắt đầu tại <strong>{frameTime(selectedTime)}</strong>. Phân tích từ khung này đến hết video; kết quả bắt đầu ở 00:00.</p>
-      <p>Xác nhận khung hình sẽ xóa các điểm sân, người và bóng đã chọn. Các nút tua dùng bước 1/30 giây; khung hình thực tế đang hiển thị được dùng khi xác nhận.</p>
+      <p>Đổi sang khung hình khác sẽ xóa các điểm sân, người và bóng; xác nhận lại cùng khung giữ các điểm đã chọn. Các nút tua dùng bước 1/30 giây; khung hình thực tế đang hiển thị được dùng khi xác nhận.</p>
       {!precise && <p role="alert">Trình duyệt này chỉ hỗ trợ chọn khung đầu. Dùng Chrome, Edge hoặc Safari bản mới để chọn khung hình khác.</p>}
     </div>
   );

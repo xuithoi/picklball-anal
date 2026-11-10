@@ -11,6 +11,7 @@ from .ball import ColorBallTracker
 from .video import TimestampDecoder
 from .options import AnalysisOptions
 from .labels import draw_labels
+from .calibration import visible_foot
 from .overlays import W, H, COLORS, CourtOverlay, draw_player, draw_fading_trail
 
 
@@ -81,13 +82,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         if settings.start_time_s > 0:
             decoder = TimestampDecoder(input_file, settings.start_time_s, width, height)
             cap.release()
-        transform = None
-        if corners:
-            source = np.float32([[x * width, y * height] for x, y in corners])
-            transform = cv2.getPerspectiveTransform(source, np.float32([[0, 0], [W-1, 0], [W-1, H-1], [0, H-1]]))
         ring_animation = settings.player_ring_animation and settings.player_marker == 'ellipse'
         trail_length = max(4, min(90, round(fps * .7)))
         overlay = CourtOverlay(width, height, corners, trail_length, settings.minimap_ball_projection)
+        transform = overlay.image_to_court
         model = YOLO(os.getenv('YOLO_MODEL', 'yolo11n.pt'))
         tmp = out / 'raw_annotated.mp4'
         writer = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
@@ -103,6 +101,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         observations = []
         ball_tracker = None
         ball_detected = 0
+        clipped_feet = 0
         frame_idx = 0
         while True:
             ok, frame = decoder.read() if decoder is not None else cap.read()
@@ -132,9 +131,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                     for box, track_id in zip(boxes, ids):
                         x1, y1, x2, y2 = map(float, box)
                         foot_xy = ((x1 + x2) / 2, y2)
+                        foot = visible_foot(box, height)
                         point = None
-                        if transform is not None:
-                            xp, yp = cv2.perspectiveTransform(np.float32([[foot_xy]]), transform)[0, 0]
+                        if transform is not None and foot is not None:
+                            xp, yp = cv2.perspectiveTransform(np.float32([[foot]]), transform)[0, 0]
                             selected = settings.player_seeds is not None and track_id in id_to_slot
                             if not selected and not (-25 <= xp <= W+25 and -25 <= yp <= H+25):
                                 continue
@@ -146,7 +146,9 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                                 continue
                             id_to_slot[track_id] = len(id_to_slot) + 1
                         slot = id_to_slot[track_id]
-                        observations.append({'player': f'P{slot}', 'name': settings.player_names[slot-1], 'track_id': track_id, 'court_xy': point, 'box': [round(float(v), 1) for v in box]})
+                        if foot is None:
+                            clipped_feet += 1
+                        observations.append({'player': f'P{slot}', 'name': settings.player_names[slot-1], 'track_id': track_id, 'court_xy': point, 'foot_xy': list(foot) if foot is not None else None, 'projection_status': 'feet_out_of_frame' if foot is None else 'calibrated' if transform is not None else 'uncalibrated', 'box': [round(float(v), 1) for v in box]})
                         history = image_trails[slot]
                         if history and frame_idx - history[-1][0] > settings.inference_stride:
                             history.clear()
@@ -219,6 +221,8 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     (out / 'positions.json').write_text(json.dumps(per_frame))
     (out / 'ball.json').write_text(json.dumps({'method': 'seeded_color_experimental' if ball_tracker else 'disabled', 'coordinates': 'video_pixels', 'frames': ball_frames}))
     warnings = []
+    if clipped_feet and transform is not None:
+        warnings.append("Một số người chơi bị cắt chân ở mép video: bỏ vị trí trên minimap/heatmap ở các quan sát đó vì không thấy điểm chân.")
     if ball_tracker:
         warnings.append('Experimental color tracking, not a trained pickleball detector. Similar colors, blur and occlusion may cause missing or incorrect observations; no trajectory is inferred through gaps.')
         if not ball_detected:
@@ -227,6 +231,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         'start_time_s': settings.start_time_s, 'timeline': 'output_relative',
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
+        'calibration': {'corners_normalized': corners, 'order': ['top_left', 'top_right', 'bottom_right', 'bottom_left'], 'map_orientation': 'image_top_to_bottom', 'foot_method': 'visible_bbox_bottom_center', 'clipped_feet_observations': clipped_feet},
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
         'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None, 'minimap_projection': 'image_homography_2d_approximate' if settings.minimap_ball_projection else 'disabled'},
         'warnings': warnings,

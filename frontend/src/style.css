@@ -2170,3 +2170,10 @@ input[type="range"] {
   .analysis-submit { flex-direction: column; align-items: stretch; padding: 22px 18px; gap: 16px; }
   .analysis-submit button { width: 100%; justify-content: center; }
 }
+
+.calibration-preview { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.calibration-warning { color: #ffc18b; font-size: 12px; line-height: 1.7; margin-top: 14px; }
+.corner-guide { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 40px; width: 160px; text-align: center; margin: 18px 0; padding: 12px; border: 1px solid var(--line); border-radius: 4px; }
+.corner-guide small, .corner-guide > span { grid-column: 1 / -1; color: #91a586; font-size: 9px; }
+.corner-guide b { color: var(--lime); font: 700 14px monospace; }
+.corner-guide > span { color: #73d8ea; border-top: 1px solid #73d8ea; padding-top: 4px; }
