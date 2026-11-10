@@ -161,10 +161,22 @@ model and annotated pickleball footage are needed for reliable automatic detecti
 
 The PNG heatmap counts accumulated player observations (not ball landings or time
 spent in seconds). Repeated visits add density. Ball image coordinates are not
-projected onto the court because an airborne ball violates the planar assumption.
+projected onto the court by default: airborne balls violate the planar assumption.
+The optional minimap ball projection is explicitly labeled as a 2D approximation.
 
 Brand asset: `frontend/public/brand/kun-logo.png` (transparent PNG), used in the
 header, footer and favicon. The homepage demo is explicitly simulated data.
+
+The homepage has one interactive demo in the hero, with animated foot rings,
+minimap and a simulated fading magenta ball trail. Play/pause and timeline position
+control the whole illustration; reduced-motion preferences start it paused.
+The upload workflow is: choose video → confirm starting frame → configure and
+mark court/players/ball → submit below calibration. The submit area summarizes
+selected inputs. Validation focuses its error message; upload/processing and
+completion move focus and scroll to their feedback/result region. Failed and
+completed jobs offer an edit-input action that preserves the selected frame and
+points. This UI change does not update an already running EC2 image.
+
 
 ## Athlete names
 
