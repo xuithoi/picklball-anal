@@ -433,6 +433,7 @@ function App() {
     minimap_overlay: false,
     minimap_ball_projection: false,
     court_lines: false,
+    court_orientation: "top_bottom",
     heatmap_overlay: false,
     ball_tracking: false,
     ball_radius: 6,
@@ -557,6 +558,7 @@ function App() {
     setOption("heatmap_overlay", false);
     setOption("minimap_overlay", false);
     setOption("court_lines", false);
+    setOption("court_orientation", "top_bottom");
     setFile(selected);
   }
   function editInputs() {
@@ -1138,8 +1140,23 @@ function App() {
                       <RotateCcw size={14} /> Chọn lại góc sân
                     </button>
                   </div>
-                  <div className="corner-guide" aria-label="Sơ đồ góc sân: phía xa 1 trái, 2 phải; phía gần 3 trái, 4 phải">
-                    <small>PHÍA XA CAMERA</small><b>1</b><b>2</b><span>LƯỚI</span><b>3</b><b>4</b><small>PHÍA GẦN CAMERA</small>
+                  <div className="court-orientation-control">
+                    <svg className="corner-guide-diagram" viewBox="0 0 120 110" role="img" aria-label="Sơ đồ góc ảnh 1 trên trái, 2 trên phải, 3 dưới trái, 4 dưới phải; đường xanh là hướng lưới">
+                      <rect x="14" y="14" width="92" height="82" fill="none" stroke="#80936e" />
+                      {options.court_orientation === "top_bottom"
+                        ? <line x1="14" y1="55" x2="106" y2="55" stroke="#73d8ea" strokeWidth="2" />
+                        : <line x1="60" y1="14" x2="60" y2="96" stroke="#73d8ea" strokeWidth="2" />}
+                      {[[14,14],[106,14],[14,96],[106,96]].map(([x,y],i) => <g key={i}><circle cx={x} cy={y} r="9" fill="#d5ff70" /><text x={x} y={y+3} fill="#142016" textAnchor="middle" fontSize="10">{i+1}</text></g>)}
+                    </svg>
+                    <div>
+                      <strong>Khớp hướng lưới thật</strong>
+                      <p>Số 1–4 chỉ vị trí góc trên ảnh. Chọn hướng để đường xanh trùng với lưới; minimap và heatmap sẽ dùng cùng hướng sân.</p>
+                      <button type="button" className="secondary" aria-pressed={options.court_orientation === "left_right"}
+                        onClick={() => setOption("court_orientation", options.court_orientation === "top_bottom" ? "left_right" : "top_bottom")}>
+                        <RotateCcw size={14} /> Đổi hướng sân 90°
+                      </button>
+                      <small>{options.court_orientation === "top_bottom" ? "Hai cuối sân: cạnh 1–2 và cạnh 3–4." : "Hai cuối sân: cạnh 1–3 và cạnh 2–4."} Giữ nguyên điểm gán tên và bóng.</small>
+                    </div>
                   </div>
                   <div className="selection-toolbar">
                     <button
@@ -1194,7 +1211,7 @@ function App() {
                   </p>
                   {selectionMode === "court" && corners.length < 4 && <p className="selection-hint">Góc tiếp theo: <strong>{corners.length + 1} · {cornerNames[corners.length]}</strong>. Nếu không thấy đủ góc ngoài, hãy chọn khung hình khác.</p>}
                   {corners.length === 4 && !validCorners(courtCorners) && <p className="calibration-warning" role="alert">{cornerError}</p>}
-                  {corners.length === 4 && validCorners(courtCorners) && <p className="selection-hint">Kiểm tra đường xanh “LƯỚI” trùng lưới thật và các đường biên trùng toàn sân. Nếu lệch, chọn lại góc trước khi phân tích.</p>}
+                  {corners.length === 4 && validCorners(courtCorners) && <p className="selection-hint">Kiểm tra đường xanh “LƯỚI” trùng lưới thật và các đường biên trùng toàn sân. Nếu lưới chạy sai chiều, bấm Đổi hướng sân 90°; nếu đường biên lệch, chọn lại góc.</p>}
                   <div
                     className="calframe"
                     onClick={(e) => {
@@ -1215,7 +1232,7 @@ function App() {
                     }}
                   >
                     <canvas ref={canvas} />
-                    <CourtCalibrationPreview corners={courtCorners} />
+                    <CourtCalibrationPreview corners={courtCorners} orientation={options.court_orientation} />
                     {options.ball_tracking && ballSeed && metadata && (
                       <span
                         className="ball-seed"

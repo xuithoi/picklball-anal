@@ -2173,7 +2173,12 @@ input[type="range"] {
 
 .calibration-preview { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .calibration-warning { color: #ffc18b; font-size: 12px; line-height: 1.7; margin-top: 14px; }
-.corner-guide { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 40px; width: 160px; text-align: center; margin: 18px 0; padding: 12px; border: 1px solid var(--line); border-radius: 4px; }
-.corner-guide small, .corner-guide > span { grid-column: 1 / -1; color: #91a586; font-size: 9px; }
-.corner-guide b { color: var(--lime); font: 700 14px monospace; }
-.corner-guide > span { color: #73d8ea; border-top: 1px solid #73d8ea; padding-top: 4px; }
+
+
+.court-orientation-control { display: flex; align-items: center; gap: 18px; margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; }
+.corner-guide-diagram { width: 110px; flex: 0 0 110px; }
+.court-orientation-control strong { font-size: 12px; }
+.court-orientation-control p, .court-orientation-control small { color: #9cad8f; font-size: 11px; line-height: 1.6; }
+.court-orientation-control p { margin: 7px 0 10px; }
+.court-orientation-control small { display: block; margin-top: 8px; }
+@media (max-width: 480px) { .court-orientation-control { align-items: flex-start; gap: 12px; padding: 12px; } .corner-guide-diagram { width: 76px; flex-basis: 76px; } }

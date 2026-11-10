@@ -84,7 +84,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             cap.release()
         ring_animation = settings.player_ring_animation and settings.player_marker == 'ellipse'
         trail_length = max(4, min(90, round(fps * .7)))
-        overlay = CourtOverlay(width, height, corners, trail_length, settings.minimap_ball_projection)
+        overlay = CourtOverlay(width, height, corners, trail_length, settings.minimap_ball_projection, settings.court_orientation)
         transform = overlay.image_to_court
         model = YOLO(os.getenv('YOLO_MODEL', 'yolo11n.pt'))
         tmp = out / 'raw_annotated.mp4'
@@ -231,7 +231,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         'start_time_s': settings.start_time_s, 'timeline': 'output_relative',
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
-        'calibration': {'corners_normalized': corners, 'order': ['top_left', 'top_right', 'bottom_right', 'bottom_left'], 'map_orientation': 'image_top_to_bottom', 'foot_method': 'visible_bbox_bottom_center', 'clipped_feet_observations': clipped_feet},
+        'calibration': {'corners_normalized': corners, 'order': ['top_left', 'top_right', 'bottom_right', 'bottom_left'], 'map_orientation': 'selected_court_axis', 'court_orientation': settings.court_orientation, 'foot_method': 'visible_bbox_bottom_center', 'clipped_feet_observations': clipped_feet},
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
         'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None, 'minimap_projection': 'image_homography_2d_approximate' if settings.minimap_ball_projection else 'disabled'},
         'warnings': warnings,

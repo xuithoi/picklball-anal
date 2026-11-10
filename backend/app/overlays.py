@@ -84,7 +84,9 @@ def draw_player(frame, observation, style, time_s=0, animated=True):
 
 class CourtOverlay:
     """Cache fixed geometry; update the small minimap only on inference frames."""
-    def __init__(self, width, height, corners, trail_length=36, show_ball=False):
+    def __init__(self, width, height, corners, trail_length=36, show_ball=False, court_orientation='top_bottom'):
+        if court_orientation not in ('top_bottom', 'left_right'):
+            raise ValueError('Invalid court orientation')
         self.projected_lines = None
         self.image_to_court = None
         self.show_ball = show_ball
@@ -97,6 +99,10 @@ class CourtOverlay:
             return
         validate_corners(corners)
         source = np.float32([[x * width, y * height] for x, y in corners])
+        # Keep clicked screen-corner order stable; rotate the physical court axis.
+        # Image right edge becomes the far baseline for a sideways court.
+        if court_orientation == 'left_right':
+            source = np.roll(source, -1, axis=0)
         self.image_to_court = cv2.getPerspectiveTransform(
             source, np.float32([[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]]))
         projection = cv2.getPerspectiveTransform(

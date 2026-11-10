@@ -129,6 +129,7 @@ Changing to a different frame clears court corners, player positions and the bal
   "player_trails": true,
   "minimap_overlay": false,
   "minimap_ball_projection": false,
+  "court_orientation": "top_bottom",
   "court_lines": false,
   "heatmap_overlay": false,
   "ball_tracking": false,
@@ -227,16 +228,24 @@ below; requests use TL/TR/BR/BL order. The minimap and optional density heatmap 
 The compact minimap has a translucent background and uses the same player colors
 as the foot rings. Very small videos skip an inset that would not fit.
 
-The UI numbers corners in two rows: **1 left / 2 right at the far end**, then
-**3 left / 4 right at the near end**. These numbers are independent of athlete
+The UI numbers corners by their position on the image: **1 top-left / 2 top-right**,
+then **3 bottom-left / 4 bottom-right**. These rows do not determine physical
+court ends for an angled or sideways camera. These numbers are independent of athlete
 P1–P4. Before upload, the frontend converts clicks to the API clockwise order
 `[1, 2, 4, 3]` (TL/TR/BR/BL), keeping the API contract unchanged.
 During calibration the UI names the next corner and projects court boundaries,
 kitchen lines and a cyan **LƯỚI** net reference onto the confirmed image. Check
 these against the real court before submitting; convexity/order checks cannot
 verify that clicked points are the actual outer corners. Do not substitute kitchen
-or net corners when a full-court corner is out of frame. Map orientation follows
-the selected image top/bottom, not athlete ID or team.
+or net corners when a full-court corner is out of frame. After selecting the corners, use **Đổi hướng sân 90°** until the cyan net
+reference follows the real net. `court_orientation: top_bottom` (default) uses
+image edges 1–2 and 3–4 as baselines; `left_right` uses edges 1–3 and 2–4. The
+corner labels and athlete/ball selections remain fixed. The chosen court axis
+is shared by the calibration preview, court lines, player/ball minimap projection,
+court PNG, JSON positions and heatmap. Rotating just the decorative net would
+leave player positions wrong, so the underlying homography is rotated instead.
+The minimap always renders its physical court upright with a horizontal net;
+it does not assume the input video's net is horizontal.
 
 Player map positions use the visible bounding-box bottom center as a foot
 approximation. A box reaching the bottom video edge has no observed foot: retain
@@ -256,7 +265,8 @@ missing observations break the trail, and projections outside the padded map are
 hidden rather than clamped to its edge. This option is off by default.
 
 API options: `player_marker` is `ellipse` (default) or `box`; `minimap_overlay` and
-`court_lines` default to false. `player_ring_animation` defaults to true;
+`court_lines` default to false. `court_orientation` accepts `top_bottom` (default)
+or `left_right` and is saved in the options and calibration metadata. `player_ring_animation` defaults to true;
 `minimap_ball_projection` defaults to false and requires both `minimap_overlay`
 and `ball_tracking`. These options are saved in job status and summary.
 A manually assigned athlete remains labeled outside the court boundary. Exported

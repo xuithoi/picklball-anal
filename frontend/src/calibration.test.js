@@ -27,3 +27,18 @@ test('two-row UI corners are converted once to the API clockwise order', () => {
   assert.ok(validCorners(orderedCourtCorners(clicks)));
   assert.deepEqual(orderedCourtCorners(clicks.slice(0,2)),clicks.slice(0,2));
 });
+
+test('sideways court net joins the top/bottom image edges and shares player coordinates', () => {
+  const corners=[[.02,.16],[.69,.07],[.94,.34],[.35,.99]];
+  const project=courtProjection(corners,'left_right');
+  const expected=[corners[1],corners[2],corners[3],corners[0]];
+  [[0,0],[1,0],[1,1],[0,1]].forEach((p,i)=>project(p).forEach((v,j)=>assert.ok(Math.abs(v-expected[i][j])<1e-9)));
+  const onSegment=(point,a,b)=>{
+    const cross=(b[0]-a[0])*(point[1]-a[1])-(b[1]-a[1])*(point[0]-a[0]);
+    assert.ok(Math.abs(cross)<1e-9);
+    assert.ok(point[0]>=Math.min(a[0],b[0])&&point[0]<=Math.max(a[0],b[0]));
+  };
+  onSegment(project([0,.5]),corners[0],corners[1]);
+  onSegment(project([1,.5]),corners[3],corners[2]);
+  assert.equal(courtProjection(corners,'auto'),null);
+});

@@ -1,8 +1,8 @@
 import React from 'react';
 import { courtProjection } from './calibration.js';
 
-export default function CourtCalibrationPreview({ corners }) {
-  const project = courtProjection(corners);
+export default function CourtCalibrationPreview({ corners, orientation = 'top_bottom' }) {
+  const project = courtProjection(corners, orientation);
   if (!project) return null;
   const kitchen = 7 / 44;
   const segments = [
