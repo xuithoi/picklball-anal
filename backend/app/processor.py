@@ -85,7 +85,9 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         if corners:
             source = np.float32([[x * width, y * height] for x, y in corners])
             transform = cv2.getPerspectiveTransform(source, np.float32([[0, 0], [W-1, 0], [W-1, H-1], [0, H-1]]))
-        overlay = CourtOverlay(width, height, corners)
+        ring_animation = settings.player_ring_animation and settings.player_marker == 'ellipse'
+        trail_length = max(4, min(90, round(fps * .7)))
+        overlay = CourtOverlay(width, height, corners, trail_length, settings.minimap_ball_projection)
         model = YOLO(os.getenv('YOLO_MODEL', 'yolo11n.pt'))
         tmp = out / 'raw_annotated.mp4'
         writer = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
@@ -107,11 +109,14 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             if not ok:
                 break
             if settings.ball_tracking and ball_tracker is None:
-                ball_tracker = ColorBallTracker(frame, settings.ball_seed, settings.ball_radius, settings.ball_tolerance, trail_length=max(4, min(90, round(fps * .7))))
+                ball_tracker = ColorBallTracker(frame, settings.ball_seed, settings.ball_radius, settings.ball_tolerance, trail_length=trail_length)
             ball_point = ball_tracker.update(frame) if ball_tracker else None
             if ball_tracker:
                 ball_detected += ball_point is not None
                 ball_frames.append({'time_s': round(frame_idx / fps, 4), 'xy': list(map(int, ball_point)) if ball_point is not None else None})
+            if settings.minimap_ball_projection:
+                overlay.update_ball(ball_point)
+            time_s = frame_idx / fps
             analyzed = frame_idx % settings.inference_stride == 0
             if analyzed:
                 result = model.track(frame, persist=True, tracker='bytetrack.yaml', classes=[0], conf=settings.confidence, verbose=False)[0]
@@ -165,12 +170,12 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                 if settings.player_trails:
                     history = [point for _, point in image_trails[slot]]
                     draw_fading_trail(frame, history, COLORS[slot - 1][::-1])
-                name_labels.append(draw_player(frame, obs, settings.player_marker))
+                name_labels.append(draw_player(frame, obs, settings.player_marker, time_s, ring_animation))
             frame = draw_labels(frame, name_labels)
             if ball_tracker:
-                ball_tracker.draw(frame, ball_point)
+                ball_tracker.draw(frame, ball_point, time_s)
             if settings.minimap_overlay:
-                overlay.draw_minimap(frame, settings.player_trails)
+                overlay.draw_minimap(frame, settings.player_trails, time_s, ring_animation)
             if settings.heatmap_overlay:
                 inset_h = min(int(height * .36), 240)
                 inset_w = int(inset_h * W / H)
@@ -223,7 +228,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         'duration_s': round(frame_idx/fps, 2), 'frames': frame_idx, 'tracked_players': len(id_to_slot),
         'calibrated': transform is not None, 'options': settings.model_dump(),
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
-        'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None},
+        'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None, 'minimap_projection': 'image_homography_2d_approximate' if settings.minimap_ball_projection else 'disabled'},
         'warnings': warnings,
         'note': 'Heatmap counts accumulated player detections, not ball movement. Court coordinates assume a planar court. Player IDs may switch on occlusion.',
     }))

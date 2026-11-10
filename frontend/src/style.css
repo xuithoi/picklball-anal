@@ -2152,3 +2152,8 @@ input[type="range"] {
 
 .seed-radius { display: grid; gap: 8px; color: #c5d9ac; font-size: 11px; margin: 12px 0; }
 .seed-radius input { width: 100%; accent-color: var(--lime); }
+
+.map-ball-option { display: flex; gap: 9px; align-items: flex-start; margin-top: 20px; }
+.map-ball-option input { accent-color: var(--lime); margin-top: 3px; }
+.map-ball-option strong { font-size: 11px; color: #d4dfc8; font-weight: 500; }
+.map-ball-option small { display: block; margin-top: 6px; font-size: 10px; line-height: 1.6; color: #9cad8f; }

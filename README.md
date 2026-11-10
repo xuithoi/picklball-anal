@@ -125,8 +125,10 @@ Confirming a frame clears court corners, player positions and the ball seed.
   "confidence": 0.3,
   "inference_stride": 2,
   "player_marker": "ellipse",
+  "player_ring_animation": true,
   "player_trails": true,
   "minimap_overlay": false,
+  "minimap_ball_projection": false,
   "court_lines": false,
   "heatmap_overlay": false,
   "ball_tracking": false,
@@ -199,6 +201,9 @@ to an existing Unicode TrueType font path.
 ## Video court graphics
 
 The default player marker is a double ellipse at the detected foot position.
+**Vòng chân chuyển động** adds a soft glow, rotating arc and subtle pulse. It is
+enabled by default for ellipse markers; uncheck it for static rings. Animation
+uses output-video time, so pausing the video also pauses the effect.
 Uncheck **Vòng màu dưới chân** to use bounding boxes instead. Marker colors match
 the P1–P4 name/position selectors. Names still come from user input and starting-frame
 manual assignments; the renderer does not recognize athlete identity.
@@ -207,18 +212,27 @@ Enable **Minimap trong video** for a frame-updated player map at the bottom left
 and **Vạch sân trên video** for projected boundaries, kitchen lines, center service
 lines and net reference. Both require four selected court corners, in the existing
 TL/TR/BR/BL order. The minimap and optional density heatmap occupy opposite corners.
-The minimap represents player ground positions; airborne ball positions are not
-projected onto the court. Very small videos skip an inset that would not fit.
+The compact minimap has a translucent background and uses the same player colors
+as the foot rings. Very small videos skip an inset that would not fit.
+
+Optionally enable **Bóng trên minimap (chiếu 2D)** after enabling both minimap and
+ball tracking. Select the court corners and a visible ball center first. The
+magenta trail and `BALL 2D` label show an approximate image-to-court projection,
+not ball height or a bounce/landing location. Airborne balls can appear displaced;
+missing observations break the trail, and projections outside the padded map are
+hidden rather than clamped to its edge. This option is off by default.
 
 API options: `player_marker` is `ellipse` (default) or `box`; `minimap_overlay` and
-`court_lines` default to false. These options are saved in job status and summary.
+`court_lines` default to false. `player_ring_animation` defaults to true;
+`minimap_ball_projection` defaults to false and requires both `minimap_overlay`
+and `ball_tracking`. These options are saved in job status and summary.
 A manually assigned athlete remains labeled outside the court boundary. Exported
 `court_xy` values are in the 400×880 court coordinate system and may fall outside
 that rectangle; they are not clamped to the baseline. The minimap includes a small
 surrounding margin. Only on-court observations contribute to the heatmap.
 
-Player and ball trails fade toward older observations. Ball trails are magenta,
-retain explicit gaps for missing detections and are limited to approximately
+Player and ball trails fade toward older observations. Ball trails have a magenta
+glow and a pulsing head, retain explicit gaps for missing detections and are limited to approximately
 0.7 seconds (4–90 frames). They do not add synthetic observations or change the
 exported ball positions. The existing seeded color tracker is still experimental;
 this change does not add a trained ball detector, hit/bounce detection or 3D tracking.

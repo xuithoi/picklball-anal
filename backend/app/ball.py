@@ -96,11 +96,14 @@ class ColorBallTracker:
         self.path.append(point)
         return point
 
-    def draw(self, frame, point):
+    def draw(self, frame, point, time_s=0):
         color = (235, 90, 235)
-        draw_fading_trail(frame, self.path, color, 2)
+        draw_fading_trail(frame, self.path, color, 2, glow=True)
         if point is not None:
-            cv2.circle(frame, point, int(round(self.radius)) + 4, color, 2, cv2.LINE_AA)
+            pulse = round(float(np.sin(time_s * 4 * np.pi)))
+            head_radius = int(round(self.radius)) + 4 + pulse
+            cv2.circle(frame, point, head_radius + 2, (70, 27, 70), 3, cv2.LINE_AA)
+            cv2.circle(frame, point, head_radius, color, 2, cv2.LINE_AA)
             cv2.circle(frame, point, 2, (240, 250, 250), -1, cv2.LINE_AA)
             cv2.putText(frame, 'BALL / EXP', (point[0] + 10, max(16, point[1] - 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, .4, color, 1, cv2.LINE_AA)

@@ -45,7 +45,8 @@ def test_minimap_updates_positions_and_clears_missing_players():
     empty = np.zeros_like(first)
     overlay.draw_minimap(empty)
     height, width = overlay.panel.shape[:2]
-    assert np.array_equal(empty[top:top + height, left:left + width], overlay.panel)
+    assert np.array_equal(empty[top:top + height, left:left + width],
+                          cv2.addWeighted(np.zeros_like(overlay.panel), .22, overlay.panel, .78, 0))
     assert not overlay.history['P1']
 
 
@@ -118,6 +119,7 @@ def test_exports_with_all_graphics_keep_frame_data_and_selected_off_court_player
         'player_count': 2, 'player_names': ['Nguyễn An', 'Trần Bình'],
         'player_seeds': [[75 / 320, 180 / 240], [245 / 320, 90 / 240]],
         'minimap_overlay': True, 'court_lines': True, 'heatmap_overlay': True,
+        'minimap_ball_projection': True,
         'ball_tracking': True, 'ball_seed': [.5, 100 / 240],
     })
     positions = json.loads((output / 'positions.json').read_text())
@@ -132,6 +134,9 @@ def test_exports_with_all_graphics_keep_frame_data_and_selected_off_court_player
     assert summary['options']['court_lines'] is True
     assert summary['ball_tracking']['detected_frames'] == 6
     assert len(json.loads((output / 'ball.json').read_text())['frames']) == 6
+    assert summary['ball_tracking']['minimap_projection'] == 'image_homography_2d_approximate'
+    ball_frames = json.loads((output / 'ball.json').read_text())['frames']
+    assert all(abs(item['xy'][0] - (160 + index * 3)) <= 1 for index, item in enumerate(ball_frames))
     exported = cv2.VideoCapture(str(output / 'annotated.mp4'))
     assert exported.get(cv2.CAP_PROP_FRAME_COUNT) == 6
     ok, frame = exported.read()
