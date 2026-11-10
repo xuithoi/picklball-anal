@@ -18,6 +18,7 @@ class AnalysisOptions(BaseModel):
     player_trails: bool = True
     minimap_overlay: bool = False
     minimap_ball_projection: bool = False
+    court_orientation: Literal['top_bottom', 'left_right'] = 'top_bottom'
     court_lines: bool = False
     heatmap_overlay: bool = False
     ball_tracking: bool = False

@@ -1,6 +1,6 @@
-export const cornerNames = ["Trên trái · phía xa", "Trên phải · phía xa", "Dưới trái · phía gần", "Dưới phải · phía gần"];
+export const cornerNames = ["Trên trái ảnh", "Trên phải ảnh", "Dưới trái ảnh", "Dưới phải ảnh"];
 
-// Click in reading order (1/2 far end, 3/4 near end); API uses clockwise TL/TR/BR/BL.
+// Click in image reading order; API uses clockwise image TL/TR/BR/BL.
 export const orderedCourtCorners = points => points.length === 4 ? [points[0], points[1], points[3], points[2]] : points;
 export const cornerError = "Chọn lại 4 góc ngoài của toàn sân: 1 trên trái → 2 trên phải → 3 dưới trái → 4 dưới phải. Không dùng góc lưới hoặc vùng bếp.";
 
@@ -18,11 +18,13 @@ export function validCorners(points) {
 }
 
 // Solve the same projective geometry as the backend, in normalized image space.
-export function courtProjection(corners) {
+export function courtProjection(corners, orientation = 'top_bottom') {
   if (!validCorners(corners)) return null;
+  if (!['top_bottom', 'left_right'].includes(orientation)) return null;
+  const physical = orientation === 'left_right' ? [...corners.slice(1), corners[0]] : corners;
   const unit = [[0, 0], [1, 0], [1, 1], [0, 1]];
   const rows = unit.flatMap(([u, v], i) => {
-    const [x, y] = corners[i];
+    const [x, y] = physical[i];
     return [[u, v, 1, 0, 0, 0, -u*x, -v*x, x], [0, 0, 0, u, v, 1, -u*y, -v*y, y]];
   });
   for (let column = 0; column < 8; column++) {
