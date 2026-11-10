@@ -57,7 +57,7 @@ Then open http://localhost:5173.
 ## Important limitations
 
 1. **MVP, not validated production AI**. Generic person detector may include bystanders, miss small people or switch identities. The current simple mapping assigns slots P1–P4 to the first four distinct tracker IDs and **does not recover from ID switches**. Use a fixed camera with all four players clearly visible and few bystanders.
-2. Court and heatmap require clicking **four court corners**. Without calibration the system produces only annotated video. Perspective transform assumes a planar court. The four corners must correspond to the outer court boundaries, consistently ordered; reversed corners will distort results.
+2. Court and heatmap require clicking **four court corners**. Without calibration the system produces only annotated video. Perspective transform assumes a planar court. The four corners must correspond to the outer court boundaries, consistently ordered. Reversed or cyclically shifted TL/TR/BR/BL clicks are rejected before upload processing; corners are not silently reordered.
 3. Heatmap counts detected player foot positions, not measured time in zones, and combines all four players. The court map displays the last detected positions. At inference stride 2, only every second frame is analyzed by default; the last player boxes remain visible on intermediate frames. The per-job inference stride is selectable (1–4).
 4. On CPU, a 5-minute 1080p video may take substantially longer than 5 minutes. Start with 30–60 seconds for testing. Processing time depends on CPU/GPU and model.
 5. Uploaded video and results expire after 30 minutes or can be deleted explicitly (see retention details below). File size limit is 600 MB. There is no authentication, queue persistence, user isolation, upload quota, antivirus scanning, video transcoding validation, or concurrency limiting. Only use on trusted networks until these are added.
@@ -114,7 +114,7 @@ For the ball tracker, enable the option, choose **Chọn tâm bóng**, click the
 of the yellow/green ball on the confirmed starting frame, and adjust the radius in source-video
 pixels and hue tolerance. A bright saturated seed is required. Seek or play/pause
 the preview, then press **Dùng khung hình này** to update the selection canvas.
-Confirming a frame clears court corners, player positions and the ball seed.
+Changing to a different frame clears court corners, player positions and the ball seed. Reconfirming the same frame preserves them. Resetting only the court corners preserves athlete assignments and the ball seed.
 
 `options` is a multipart form field containing JSON. Defaults:
 
@@ -222,10 +222,31 @@ manual assignments; the renderer does not recognize athlete identity.
 
 Enable **Minimap trong video** for a frame-updated player map at the bottom left,
 and **Vạch sân trên video** for projected boundaries, kitchen lines, center service
-lines and net reference. Both require four selected court corners, in the existing
-TL/TR/BR/BL order. The minimap and optional density heatmap occupy opposite corners.
+lines and net reference. Both require four selected court corners. Use the UI two-row numbering described
+below; requests use TL/TR/BR/BL order. The minimap and optional density heatmap occupy opposite corners.
 The compact minimap has a translucent background and uses the same player colors
 as the foot rings. Very small videos skip an inset that would not fit.
+
+The UI numbers corners in two rows: **1 left / 2 right at the far end**, then
+**3 left / 4 right at the near end**. These numbers are independent of athlete
+P1–P4. Before upload, the frontend converts clicks to the API clockwise order
+`[1, 2, 4, 3]` (TL/TR/BR/BL), keeping the API contract unchanged.
+During calibration the UI names the next corner and projects court boundaries,
+kitchen lines and a cyan **LƯỚI** net reference onto the confirmed image. Check
+these against the real court before submitting; convexity/order checks cannot
+verify that clicked points are the actual outer corners. Do not substitute kitchen
+or net corners when a full-court corner is out of frame. Map orientation follows
+the selected image top/bottom, not athlete ID or team.
+
+Player map positions use the visible bounding-box bottom center as a foot
+approximation. A box reaching the bottom video edge has no observed foot: retain
+the name/marker in the video, but omit that observation from minimap/heatmap and
+export `court_xy: null`, `foot_xy: null`, `projection_status: feet_out_of_frame`.
+Other observations export the foot and calibration status for diagnosis.
+`summary.json.calibration` records the selected normalized corners, their order,
+map orientation, foot method and clipped-foot count. Reanalyze an old video to
+regenerate these fields; an existing annotated video is not rewritten.
+
 
 Optionally enable **Bóng trên minimap (chiếu 2D)** after enabling both minimap and
 ball tracking. Select the court corners and a visible ball center first. The
@@ -264,7 +285,7 @@ are time steps, not a claim of one decoded frame on every frame rate. Press
 The selected source timestamp is displayed to millisecond precision. Previewing
 another time does not change existing selections until the frame is confirmed.
 
-Confirmation resets court corners, athlete positions and ball seed while preserving
+Changing the confirmed frame resets court corners, athlete positions and ball seed while preserving
 entered names and analysis options. Select those points again on the new image.
 Modern `requestVideoFrameCallback` support is required for selecting nonzero start
 frames. Older browsers can still select the first frame. The timestamp comes from

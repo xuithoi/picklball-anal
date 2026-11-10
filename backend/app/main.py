@@ -155,12 +155,12 @@ async def create_job(video: UploadFile = File(...), corners: str = Form(''), opt
         await video.close()
         raise HTTPException(422, 'Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.')
     if parsed is not None:
-        import cv2
-        import numpy as np
-        polygon = np.array(parsed, dtype=np.float32)
-        if not cv2.isContourConvex(polygon) or cv2.contourArea(polygon) < 0.005:
+        from .calibration import validate_corners
+        try:
+            validate_corners(parsed)
+        except ValueError as exc:
             await video.close()
-            raise HTTPException(422, 'Bốn góc sân phải tạo thành tứ giác lồi, theo thứ tự trên trái, trên phải, dưới phải, dưới trái.')
+            raise HTTPException(422, str(exc))
     job_id = str(uuid.uuid4())
     path = ROOT / job_id
     path.mkdir()

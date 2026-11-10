@@ -4,6 +4,7 @@ import math
 
 import cv2
 import numpy as np
+from .calibration import validate_corners
 
 W, H = 400, 880
 # RGB, matching the P1-P4 selection markers in the frontend.
@@ -94,6 +95,7 @@ class CourtOverlay:
         self.panel = None
         if corners is None:
             return
+        validate_corners(corners)
         source = np.float32([[x * width, y * height] for x, y in corners])
         self.image_to_court = cv2.getPerspectiveTransform(
             source, np.float32([[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]]))
