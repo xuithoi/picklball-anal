@@ -932,7 +932,7 @@ function App() {
                       }
                     />
                     <small>
-                      Tăng để lọc nhận diện yếu; có thể bỏ sót người ở xa.
+                      Ngưỡng bắt đầu theo dõi người mới. Người đang theo dõi có thể được giữ bằng phát hiện yếu hơn.
                     </small>
                   </label>
                 </div>
@@ -1453,6 +1453,13 @@ function App() {
                           {summary.frames} khung hình
                         </strong>
                         <p>Bắt đầu từ {frameTime(summary.start_time_s || 0)} của video gốc. Các mốc trong kết quả tính từ 00:00 của đoạn đã chọn.</p>
+                        {summary.tracking && (
+                          <div className="tracking-report">
+                            <p>Theo dõi đủ người: {summary.tracking.complete_frames}/{summary.tracking.inference_frames} khung suy luận. Tỷ lệ dưới đây là mức xuất hiện trong kết quả, không phải độ chính xác nhận diện.</p>
+                            {summary.tracking.players.map(person => <p key={person.player}>{person.player} · {person.name}: {Math.round(person.coverage * 100)}% khung suy luận</p>)}
+                            {summary.tracking.unassigned_track_ids.length > 0 && <p>Có mã theo dõi chưa gán tên: {summary.tracking.unassigned_track_ids.join(", ")}. Xem Dữ liệu JSON để kiểm tra khung bị mất dấu.</p>}
+                          </div>
+                        )}
                         {summary.options?.minimap_ball_projection && (
                           <p>Vị trí bóng trên minimap là phép chiếu 2D gần đúng từ ảnh, không biểu thị độ cao hay điểm chạm sân.</p>
                         )}
