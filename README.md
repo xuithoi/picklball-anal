@@ -179,6 +179,29 @@ completed jobs offer an edit-input action that preserves the selected frame and
 points. This UI change does not update an already running EC2 image.
 
 
+## Tracking diagnostics
+
+`confidence` is the high-score association/new-track threshold. Person candidates
+at 0.10 or above reach ByteTrack, allowing an existing track to survive a weaker
+matched observation. The 0.10 detector admission threshold does not independently
+create a new athlete: new tracks must still meet the selected confidence. Tracker
+configuration is private to each job and removed after processing.
+
+`positions.json` includes `tracking` per frame: `track_output_count`,
+`unassigned_track_ids`, `outside_court_count` and named `missing_players`. This
+counts tracker outputs, not raw YOLO detections. On `inferred: false` frames it
+repeats the last inference diagnostic and observations. `summary.json.tracking`
+and the UI report full-roster frame count and observed-frame coverage per player;
+coverage is not identity accuracy. Only inference frames contribute to the totals.
+Missing players or newly unassigned IDs produce visible warnings rather than a
+successful job silently implying complete tracking.
+
+A clicked athlete remains bound to the initial tracker ID. This change improves
+continuity through weaker detections but does not add visual re-identification:
+a new ID is reported and kept unassigned rather than receiving another athlete's
+name. An actual failed clip and its diagnostic output are still needed to decide
+whether a miss came from absent tracker output, an ID change or court filtering.
+
 ## Athlete names
 
 Enter names for P1–P4, or P1–P2 in singles mode. Names are optional, trimmed,

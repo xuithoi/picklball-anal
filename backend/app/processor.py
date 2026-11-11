@@ -12,6 +12,7 @@ from .video import TimestampDecoder
 from .options import AnalysisOptions
 from .labels import draw_labels
 from .calibration import visible_foot
+from .player_tracking import tracker_thresholds
 from .overlays import W, H, COLORS, CourtOverlay, draw_player, draw_fading_trail
 
 
@@ -62,6 +63,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     settings = AnalysisOptions.model_validate(options or {})
     if (settings.heatmap_overlay or settings.minimap_overlay or settings.court_lines) and not corners:
         raise ValueError('Chọn đủ 4 góc sân để hiển thị minimap, vạch sân hoặc heatmap trong video.')
+    thresholds = tracker_thresholds(settings.confidence)
+    tracker_file = out / 'player_tracker.yaml'
+    # JSON is valid YAML; keep configuration local to this job.
+    tracker_file.write_text(json.dumps(thresholds))
     cap = cv2.VideoCapture(str(input_file))
     writer = None
     decoder = None
@@ -102,6 +107,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         ball_tracker = None
         ball_detected = 0
         clipped_feet = 0
+        analyzed_frames = complete_tracking_frames = missing_tracking_frames = 0
+        observed_counts = [0] * settings.player_count
+        unassigned_ids = set()
+        diagnostic = None
         frame_idx = 0
         while True:
             ok, frame = decoder.read() if decoder is not None else cap.read()
@@ -118,7 +127,9 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
             time_s = frame_idx / fps
             analyzed = frame_idx % settings.inference_stride == 0
             if analyzed:
-                result = model.track(frame, persist=True, tracker='bytetrack.yaml', classes=[0], conf=settings.confidence, verbose=False)[0]
+                analyzed_frames += 1
+                diagnostic = {'track_output_count': 0, 'unassigned_track_ids': [], 'outside_court_count': 0, 'missing_players': []}
+                result = model.track(frame, persist=True, tracker=str(tracker_file), classes=[0], conf=thresholds['track_low_thresh'], verbose=False)[0]
                 observations = []
                 if frame_idx == 0 and settings.player_seeds is not None:
                     boxes = result.boxes
@@ -128,6 +139,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                 if result.boxes is not None and result.boxes.id is not None:
                     boxes = result.boxes.xyxy.cpu().numpy()
                     ids = result.boxes.id.int().cpu().tolist()
+                    diagnostic["track_output_count"] = len(ids)
                     for box, track_id in zip(boxes, ids):
                         x1, y1, x2, y2 = map(float, box)
                         foot_xy = ((x1 + x2) / 2, y2)
@@ -137,12 +149,15 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                             xp, yp = cv2.perspectiveTransform(np.float32([[foot]]), transform)[0, 0]
                             selected = settings.player_seeds is not None and track_id in id_to_slot
                             if not selected and not (-25 <= xp <= W+25 and -25 <= yp <= H+25):
+                                diagnostic["outside_court_count"] += 1
                                 continue
                             point = [float(xp), float(yp)]
                         if track_id not in id_to_slot:
                             if settings.player_seeds is not None:
+                                diagnostic["unassigned_track_ids"].append(track_id)
                                 continue
                             if len(id_to_slot) >= settings.player_count:
+                                diagnostic["unassigned_track_ids"].append(track_id)
                                 continue
                             id_to_slot[track_id] = len(id_to_slot) + 1
                         slot = id_to_slot[track_id]
@@ -159,6 +174,15 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                                 visit = np.zeros_like(heat)
                                 cv2.circle(visit, tuple(map(int, point)), 18, 1.0, -1)
                                 heat += visit
+                visible = {item['player'] for item in observations}
+                for slot in range(settings.player_count):
+                    if f'P{slot+1}' in visible:
+                        observed_counts[slot] += 1
+                    else:
+                        diagnostic['missing_players'].append({'player': f'P{slot+1}', 'name': settings.player_names[slot]})
+                complete_tracking_frames += not diagnostic['missing_players']
+                missing_tracking_frames += bool(diagnostic['missing_players'])
+                unassigned_ids.update(diagnostic['unassigned_track_ids'])
                 if settings.minimap_overlay:
                     overlay.update(observations)
                 if settings.heatmap_overlay:
@@ -187,7 +211,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
                     frame[top:top+inset_h, left:left+inset_w] = inset
                     cv2.rectangle(frame, (left, top), (left+inset_w, top+inset_h), (112, 255, 213), 1)
                     cv2.putText(frame, 'HEATMAP', (left, max(12, top-5)), cv2.FONT_HERSHEY_SIMPLEX, .3, (112, 255, 213), 1)
-            per_frame.append({'time_s': round(frame_idx/fps, 4), 'inferred': analyzed, 'players': observations})
+            per_frame.append({'time_s': round(frame_idx/fps, 4), 'inferred': analyzed, 'players': observations, 'tracking': diagnostic})
             writer.write(frame)
             frame_idx += 1
             if frame_idx % 60 == 0:
@@ -196,6 +220,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         if decoder is not None:
             decoder.close()
         cap.release()
+        tracker_file.unlink(missing_ok=True)
         if writer is not None:
             writer.release()
     if frame_idx == 0:
@@ -221,6 +246,10 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
     (out / 'positions.json').write_text(json.dumps(per_frame))
     (out / 'ball.json').write_text(json.dumps({'method': 'seeded_color_experimental' if ball_tracker else 'disabled', 'coordinates': 'video_pixels', 'frames': ball_frames}))
     warnings = []
+    if missing_tracking_frames:
+        warnings.append(f'Có {missing_tracking_frames}/{analyzed_frames} khung suy luận không theo dõi đủ {settings.player_count} người chơi. Xem tracking trong positions.json để phân biệt mất đầu ra tracker, mã chưa gán hoặc lọc ngoài sân.')
+    if unassigned_ids:
+        warnings.append('Có mã theo dõi mới chưa gán tên. Hệ thống không tự chuyển tên sang người khác khi chưa xác định được danh tính; đây có thể là đổi ID sau mất dấu hoặc người ngoài sân.')
     if clipped_feet and transform is not None:
         warnings.append("Một số người chơi bị cắt chân ở mép video: bỏ vị trí trên minimap/heatmap ở các quan sát đó vì không thấy điểm chân.")
     if ball_tracker:
@@ -234,6 +263,7 @@ def process_video(input_file: Path, out: Path, corners, progress, options=None):
         'calibration': {'corners_normalized': corners, 'order': ['top_left', 'top_right', 'bottom_right', 'bottom_left'], 'map_orientation': 'selected_court_axis', 'court_orientation': settings.court_orientation, 'foot_method': 'visible_bbox_bottom_center', 'clipped_feet_observations': clipped_feet},
         'players': [{'player': f'P{i+1}', 'name': name} for i, name in enumerate(settings.player_names)],
         'ball_tracking': {'enabled': bool(ball_tracker), 'detected_frames': ball_detected, 'total_frames': frame_idx, 'coverage': round(ball_detected/frame_idx, 4) if ball_tracker else None, 'seed_xy': list(ball_tracker.seed_xy) if ball_tracker else None, 'effective_radius': round(ball_tracker.radius, 2) if ball_tracker else None, 'minimap_projection': 'image_homography_2d_approximate' if settings.minimap_ball_projection else 'disabled'},
+        'tracking': {'inference_frames': analyzed_frames, 'complete_frames': complete_tracking_frames, 'missing_frames': missing_tracking_frames, 'unassigned_track_ids': sorted(unassigned_ids), 'detector_confidence': thresholds['track_low_thresh'], 'initial_confidence': settings.confidence, 'players': [{'player': f'P{i+1}', 'name': settings.player_names[i], 'observed_inference_frames': count, 'coverage': round(count / analyzed_frames, 4)} for i, count in enumerate(observed_counts)]},
         'warnings': warnings,
         'note': 'Heatmap counts accumulated player detections, not ball movement. Court coordinates assume a planar court. Player IDs may switch on occlusion.',
     }))
