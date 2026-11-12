@@ -3,8 +3,8 @@
 The frontend runs at `picklball-anal.xuithoi.workers.dev`. The Worker forwards
 `/api/*` to `https://pickleballmvp.run.place`, where Caddy terminates HTTPS and
 forwards to one FastAPI/YOLO process. The backend container has no public port.
-Cloudflare Access protects the frontend/Worker; backend Basic authentication is
-configured separately. No passwords or AWS keys belong in Git.
+The production EC2 website and API are public: Compose disables the backend
+Basic login and does not pass credentials from an existing `.env`. No passwords or AWS keys belong in Git.
 
 This recipe supports **Amazon Linux 2023 x86_64** (the existing EC2 machine) and
 Ubuntu 24.04 x86_64. It does not create instances, resize disks or activate paid
@@ -46,16 +46,27 @@ cd ~/picklball-anal/deploy/aws
 bash configure.sh pickleballmvp.run.place
 ```
 
-`configure.sh` creates an ignored `.env` with mode 0600. It reuses the password
-from `~/pickleball-backend.env` generated in the earlier Docker setup, if that
-file exists. Otherwise it generates a new random password. An existing `.env`
-is preserved and the command stops, so you can continue with that file after
-checking its domain. Nonstandard legacy credentials require manual migration;
-the script never silently changes an existing password.
+`configure.sh` creates an ignored `.env` with mode 0600 containing the backend
+domain, upload limit and data volume. It does not create or migrate login
+credentials. An existing `.env` and legacy credential file are preserved; the
+production Compose environment explicitly clears the app password.
 
-Read the password only in your own secure terminal when entering the Cloudflare
-secret. Do not paste it into chat, screenshots, command arguments, PRs or Git.
-Do not print expanded `docker compose config` in shared logs; use `--quiet`.
+### Remove login from an existing EC2 deployment
+
+After updating this checkout, recreate only the backend. The existing image
+already supports public access; no image build is required for this change:
+
+```sh
+cd /home/ec2-user/picklball-anal
+git pull --ff-only origin main
+sudo docker compose --env-file deploy/aws/.env -f deploy/aws/compose.yaml up -d --no-deps --force-recreate backend
+curl -I https://pickleballmvp.run.place/
+```
+
+The homepage should return 200 without a `WWW-Authenticate` challenge. Existing
+credentials may remain in the private `.env`; Compose ignores them. HTTPS and
+data volumes are unchanged. If the separate workers.dev site has a Cloudflare
+Access policy, that policy is managed separately from this backend Basic gate.
 
 ## 3. Build, then switch the existing backend to Compose
 
@@ -116,14 +127,12 @@ environment variable on the old static-only deployment cannot connect the API.
 In Workers & Pages → `picklball-anal` → Settings → Variables and Secrets:
 
 - `BACKEND_ORIGIN` (Text): `https://pickleballmvp.run.place` (no `/api`).
-- `BACKEND_USERNAME` (Text): `kun`.
-- `BACKEND_PASSWORD` (**Secret**): EC2's private `.env` `APP_PASSWORD`.
+- Backend username/password are not required for the public EC2 deployment.
 
-The first two nonsecret values are already supplied in `wrangler.jsonc`.
-`keep_vars` preserves other dashboard variables; secrets stay in Cloudflare.
-Keep the existing Cloudflare Access policy protecting the Worker, since it uses
-the shared backend password on behalf of authenticated users. The Worker strips
-Cloudflare cookies and identity tokens before forwarding requests to EC2.
+The backend origin is supplied in `wrangler.jsonc`. Existing optional Worker
+credentials are ignored by the public backend. A separately configured Cloudflare
+Access policy on the Worker domain is independent of the EC2 login removal. The
+Worker strips Cloudflare cookies and identity tokens before forwarding requests.
 
 Cloudflare Git build settings:
 
@@ -158,7 +167,7 @@ AWS update from Cloudflare's build: EC2 must run the updated backend separately.
 
 ## 5. Check the complete workflow
 
-After signing in to Cloudflare Access, `/api/health` on the Worker domain must
+`/api/health` on the Worker domain must
 return `{"ok":true}`. Upload a short MP4, enter names, click the matching athletes
 on frame zero, verify job completion, downloads and deletion. The Worker streams
 uploads/downloads, but the Cloudflare plan can impose a lower request-size limit.
@@ -170,7 +179,7 @@ Local checks:
 ```sh
 node --test worker/*.test.mjs frontend/src/api.test.js
 python3 -m unittest discover -s deploy/aws/tests -v
-APP_PASSWORD=validation-only BACKEND_DOMAIN=pickleballmvp.run.place docker compose -f deploy/aws/compose.yaml config --quiet
+BACKEND_DOMAIN=pickleballmvp.run.place docker compose -f deploy/aws/compose.yaml config --quiet
 ```
 
 The combined image has been built and smoke-tested locally under 1600 MB/1.5 CPU:
