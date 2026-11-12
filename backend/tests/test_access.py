@@ -20,3 +20,14 @@ def test_public_deployment_fails_closed_without_password(monkeypatch):
     monkeypatch.setenv('REQUIRE_AUTH', '1')
     monkeypatch.delenv('APP_PASSWORD', raising=False)
     assert TestClient(main.app).get('/api/jobs/invalid').status_code == 503
+
+
+def test_public_ec2_environment_does_not_challenge_for_login(monkeypatch):
+    # Compose supplies an explicit blank password, overriding legacy .env values.
+    monkeypatch.setenv('REQUIRE_AUTH', '0')
+    monkeypatch.setenv('APP_PASSWORD', '')
+    client = TestClient(main.app)
+    for path in ['/', '/api/jobs/not-a-uuid', '/api/jobs/not-a-uuid/files/positions.json']:
+        response = client.get(path)
+        assert response.status_code not in (401, 503)
+        assert 'www-authenticate' not in response.headers

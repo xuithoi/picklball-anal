@@ -3,9 +3,9 @@ services:
     image: pickleball-ai:latest
     restart: unless-stopped
     environment:
-      REQUIRE_AUTH: "1"
-      APP_USERNAME: "${APP_USERNAME:-kun}"
-      APP_PASSWORD: "${APP_PASSWORD:?Set APP_PASSWORD in the private .env file}"
+      REQUIRE_AUTH: "0"
+      # Blank explicitly so credentials in an existing .env cannot enable login.
+      APP_PASSWORD: ""
       MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-100}"
       RESULT_TTL_SECONDS: "1800"
       CLEANUP_INTERVAL_SECONDS: "30"

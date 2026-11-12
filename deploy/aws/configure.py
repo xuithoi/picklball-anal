@@ -1,7 +1,6 @@
-"""Create a private Compose configuration without exposing or replacing credentials."""
+"""Create private settings for the public EC2 deployment."""
 import os
 import re
-import secrets
 import sys
 from pathlib import Path
 
@@ -12,17 +11,7 @@ def configure(directory, domain, legacy):
     target = directory / '.env'
     if target.exists():
         raise ValueError('Existing .env preserved. Edit it locally if configuration needs changing.')
-    username = 'kun'
-    password = secrets.token_hex(32)
-    if legacy.exists():
-        values = dict(line.split('=', 1) for line in legacy.read_text().splitlines() if '=' in line and not line.startswith('#'))
-        username = values.get('APP_USERNAME', 'kun')
-        password = values.get('APP_PASSWORD', '')
-        # The earlier EC2 setup generated a hexadecimal password. Refuse ambiguous
-        # dotenv syntax instead of silently changing an existing credential.
-        if not re.fullmatch(r'[A-Za-z0-9_.-]+', username) or not re.fullmatch(r'[A-Za-z0-9_-]{16,}', password):
-            raise ValueError('Existing backend credentials need manual migration into the private .env file; they were not changed.')
-    content = f'BACKEND_DOMAIN={domain}\nAPP_USERNAME={username}\nAPP_PASSWORD={password}\nMAX_UPLOAD_MB=100\nDATA_VOLUME=pickleball_data\n'
+    content = f'BACKEND_DOMAIN={domain}\nMAX_UPLOAD_MB=100\nDATA_VOLUME=pickleball_data\n'
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as stream:
         stream.write(content)
@@ -35,4 +24,4 @@ if __name__ == '__main__':
         configure(Path(__file__).resolve().parent, sys.argv[1], Path.home() / 'pickleball-backend.env')
     except (ValueError, OSError) as exc:
         sys.exit(str(exc))
-    print('Created private .env; existing backend credentials were reused when present. No password was printed.')
+    print('Created private .env for public access; no login credentials are required.')
