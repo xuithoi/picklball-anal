@@ -26,9 +26,18 @@ sudo bash deploy/aws/bootstrap.sh
 ```
 
 The bootstrap script preserves the installed Docker engine. On Amazon Linux, if
-Compose is missing it installs Docker Compose v2.39.4 after checking the official
-release's SHA-256 checksum. TLS/checksum verification stays enabled. The old
-`bootstrap-ubuntu.sh` entrypoint forwards to the same installer.
+Compose is missing, it starts Docker and extracts Compose v2.39.4 from the official
+`docker/compose-bin` image pinned by OCI digest. It verifies the binary against
+the pinned official release SHA-256 before installing it. This avoids the GitHub
+release download path that returned HTTP 504 during EC2 setup. If the registry
+is unavailable, the installer falls back to the GitHub release with the same
+SHA-256 verification. If both methods fail, no unverified plugin is installed.
+TLS and checksum verification remain enabled.
+
+Extraction uses a stopped temporary container removed automatically; application
+containers and volumes are untouched. An already installed matching plugin is
+reused without downloading again. The old `bootstrap-ubuntu.sh` entrypoint forwards
+to the same bootstrap script. No Docker Compose service is started by installation.
 
 ## 2. Verify DNS and create private backend settings
 
